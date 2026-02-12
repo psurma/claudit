@@ -115,8 +115,9 @@ function renderSparkline(dataPoints, maxAgeSeconds, color) {
     ` ${points[points.length - 1].x.toFixed(1)},${height}`;
 
   const gradId = "sg-" + Math.random().toString(36).slice(2, 8);
+  const compactPoints = JSON.stringify(filtered.map((p) => ({ t: p.timestamp, v: p.value })));
 
-  return `<div class="sparkline">
+  return `<div class="sparkline" data-points='${compactPoints.replace(/'/g, "&#39;")}'>
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
       <defs>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
@@ -175,6 +176,32 @@ function formatWindowLabel(start, end) {
   return `${monthNames[startDate.getMonth()]} ${startDate.getDate()} ${formatTime(startDate)} - ${monthNames[endDate.getMonth()]} ${endDate.getDate()} ${formatTime(endDate)}`;
 }
 
+function computePrediction(filtered, windowEnd) {
+  if (filtered.length < 2) return null;
+  const last = filtered[filtered.length - 1];
+  if (last.timestamp >= windowEnd) return null;
+
+  const n = filtered.length;
+  let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0;
+  for (let i = 0; i < n; i++) {
+    const x = filtered[i].timestamp;
+    const y = filtered[i].value;
+    sumX += x;
+    sumY += y;
+    sumXX += x * x;
+    sumXY += x * y;
+  }
+  const denom = n * sumXX - sumX * sumX;
+  if (Math.abs(denom) < 1e-12) return null;
+
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  if (Math.abs(slope) < 1e-12) return null;
+
+  const intercept = (sumY - slope * sumX) / n;
+  const predicted = Math.min(1, Math.max(0, slope * windowEnd + intercept));
+  return { predictedValue: predicted };
+}
+
 function renderWindowSparkline(dataPoints, start, end, color) {
   const filtered = dataPoints.filter((p) => p.timestamp >= start && p.timestamp <= end);
 
@@ -206,8 +233,9 @@ function renderWindowSparkline(dataPoints, start, end, color) {
     ` ${points[points.length - 1].x.toFixed(1)},${height}`;
 
   const gradId = "sg-" + Math.random().toString(36).slice(2, 8);
+  const compactPoints = JSON.stringify(filtered.map((p) => ({ t: p.timestamp, v: p.value })));
 
-  return `<div class="sparkline">
+  return `<div class="sparkline" data-points='${compactPoints.replace(/'/g, "&#39;")}'>
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
       <defs>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
@@ -217,6 +245,15 @@ function renderWindowSparkline(dataPoints, start, end, color) {
       </defs>
       <polygon points="${areaPoints}" fill="url(#${gradId})"/>
       <polyline points="${linePoints}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${(() => {
+        const now = Math.floor(Date.now() / 1000);
+        if (now < start || now > end) return "";
+        const prediction = computePrediction(filtered, end);
+        if (!prediction) return "";
+        const lastPt = points[points.length - 1];
+        const predY = padTop + chartHeight - prediction.predictedValue * chartHeight;
+        return `<line x1="${lastPt.x.toFixed(1)}" y1="${lastPt.y.toFixed(1)}" x2="${width}" y2="${predY.toFixed(1)}" stroke="${color}" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"/>`;
+      })()}
     </svg>
   </div>`;
 }
@@ -559,9 +596,31 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+function formatTooltipTime(ts) {
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+
+  const h = d.getHours();
+  const ampm = h >= 12 ? "pm" : "am";
+  const h12 = h % 12 || 12;
+  const min = d.getMinutes();
+  const timeStr = min > 0 ? `${h12}:${String(min).padStart(2, "0")}${ampm}` : `${h12}${ampm}`;
+
+  if (isToday) return timeStr;
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${monthNames[d.getMonth()]} ${d.getDate()}, ${timeStr}`;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
   initCostsCollapse();
+
+  // Shared sparkline tooltip
+  const tooltip = document.createElement("div");
+  tooltip.className = "sparkline-tooltip";
+  document.getElementById("app").appendChild(tooltip);
 
   // Sync stay-on-top pref to Rust on startup
   const stayOnTop = localStorage.getItem(STAY_ON_TOP_KEY) === "true";
@@ -592,6 +651,58 @@ document.addEventListener("DOMContentLoaded", () => {
     const label = nav.getAttribute("data-label");
     const direction = btn.classList.contains("sparkline-prev") ? -1 : 1;
     navigateSparkline(label, direction);
+  });
+
+  // Sparkline tooltip on hover
+  document.getElementById("usage-limits").addEventListener("mousemove", (e) => {
+    const sparkline = e.target.closest(".sparkline");
+    if (!sparkline) {
+      tooltip.style.display = "none";
+      return;
+    }
+    const raw = sparkline.getAttribute("data-points");
+    if (!raw) return;
+
+    const pts = JSON.parse(raw);
+    if (pts.length < 2) return;
+
+    const svg = sparkline.querySelector("svg");
+    if (!svg) return;
+
+    const rect = svg.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, mouseX / rect.width));
+
+    const minT = pts[0].t;
+    const maxT = pts[pts.length - 1].t;
+    const targetT = minT + ratio * (maxT - minT);
+
+    let closest = pts[0];
+    let closestDist = Math.abs(targetT - closest.t);
+    for (let i = 1; i < pts.length; i++) {
+      const dist = Math.abs(targetT - pts[i].t);
+      if (dist < closestDist) {
+        closest = pts[i];
+        closestDist = dist;
+      }
+    }
+
+    const pct = Math.round(Math.min(1, Math.max(0, closest.v)) * 100);
+    tooltip.textContent = `${formatTooltipTime(closest.t)} \u2014 ${pct}%`;
+    tooltip.style.display = "block";
+
+    const tipRect = tooltip.getBoundingClientRect();
+    const panelRect = document.querySelector(".panel").getBoundingClientRect();
+    let left = e.clientX - tipRect.width / 2;
+    left = Math.max(panelRect.left + 4, Math.min(left, panelRect.right - tipRect.width - 4));
+    const top = rect.top - tipRect.height - 6;
+
+    tooltip.style.left = left + "px";
+    tooltip.style.top = top + "px";
+  });
+
+  document.getElementById("usage-limits").addEventListener("mouseleave", () => {
+    tooltip.style.display = "none";
   });
 
   // Trackpad swipe navigation for sparklines

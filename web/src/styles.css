@@ -270,6 +270,21 @@ h2 {
   color: var(--text-dim);
 }
 
+.sparkline-tooltip {
+  position: fixed;
+  display: none;
+  pointer-events: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+  z-index: 100;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
 /* Preferences section */
 #prefs-section {
   padding: 8px 0 4px;

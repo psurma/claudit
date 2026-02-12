@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.5 (2026-02-12)
+
+### Added
+- Prediction line on session sparklines showing projected usage at window end
+- Dashed line extends from last data point using linear regression of historical points
+- Predicted value clamped to 0-100% range
+- Only appears on the current (live) session window, not past windows
+- No prediction shown for flat usage (slope near zero)
+- Weekly sparklines unchanged
+
+## 0.6.4 (2026-02-12)
+
+### Added
+- Sparkline tooltip on hover showing timestamp and usage percentage for the nearest data point
+- Tooltip displays time for today's data ("2:30pm") and includes date for older data ("Feb 10, 2:30pm")
+- Tooltip follows mouse horizontally, clamped within panel bounds
+- Works on both navigable session sparklines and weekly sparklines
+- Adapts to light and dark themes via CSS variables
+
 ## 0.6.3 (2026-02-12)
 
 ### Added
