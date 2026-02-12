@@ -327,7 +327,7 @@ function renderUsage(data) {
       <div class="limit-item">
         <div class="limit-header">
           <span class="limit-label">Extra Usage</span>
-          <span class="limit-pct" style="color: var(--${colorClass})">${formatCost(eu.used_credits)} / ${formatCost(eu.monthly_limit)}</span>
+          <span class="limit-pct" style="color: var(--${colorClass})">${pct}% (&pound;${eu.used_credits.toFixed(2)})</span>
         </div>
         <div class="progress-track">
           <div class="progress-fill ${colorClass}" style="width: ${pct}%"></div>
