@@ -394,6 +394,12 @@ h2 {
 /* Detached / breakout mode */
 body.detached {
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+body.detached::-webkit-scrollbar {
+  display: none;
 }
 
 body.detached .arrow {

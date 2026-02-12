@@ -208,7 +208,7 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
         .unwrap_or("https://github.com/psurma/claudit/releases")
         .to_string();
 
-    let update_available = latest != "unknown" && latest != current;
+    let update_available = latest != "unknown" && is_newer_version(&latest, &current);
 
     log(&format!(
         "check_for_updates: current={}, latest={}, update={}",
@@ -221,4 +221,22 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
         update_available,
         release_url: html_url,
     })
+}
+
+fn parse_version(v: &str) -> Option<Vec<u64>> {
+    v.split('.')
+        .map(|part| part.parse::<u64>().ok())
+        .collect()
+}
+
+fn is_newer_version(latest: &str, current: &str) -> bool {
+    let Some(l) = parse_version(latest) else { return false };
+    let Some(c) = parse_version(current) else { return false };
+    for i in 0..l.len().max(c.len()) {
+        let lv = l.get(i).copied().unwrap_or(0);
+        let cv = c.get(i).copied().unwrap_or(0);
+        if lv > cv { return true; }
+        if lv < cv { return false; }
+    }
+    false
 }

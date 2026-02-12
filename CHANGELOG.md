@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1 (2026-02-12)
+
+### Fixed
+- Hidden scrollbar in detached mode that appeared as a border on the right
+- Update checker now uses proper semver comparison (no longer shows older versions as updates)
+- Session sparkline now shows 24 hours of history so previous 5hr windows are visible
+
 ## 0.6.0 (2026-02-12)
 
 ### Added

@@ -7,7 +7,7 @@ let countdownTimer = null;
 let countdown = 60;
 let isDetached = false;
 
-const SESSION_MAX_AGE = 18000; // 5 hours in seconds
+const SESSION_MAX_AGE = 86400; // 24 hours - shows previous 5hr windows too
 const WEEKLY_MAX_AGE = 604800; // 7 days in seconds
 const THEME_KEY = "claudit-theme";
 const COSTS_COLLAPSED_KEY = "claudit-costs-collapsed";
@@ -352,6 +352,8 @@ async function checkForUpdates() {
       statusEl.innerHTML =
         'v' + escapeHtml(info.latest_version) + ' available - <a href="' +
         escapeHtml(info.release_url) + '" target="_blank">Download</a>';
+    } else if (info.latest_version === "unknown") {
+      statusEl.textContent = "No releases found";
     } else {
       statusEl.textContent = "Up to date";
     }
