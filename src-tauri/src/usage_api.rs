@@ -123,8 +123,8 @@ pub async fn fetch_usage(token: &str) -> Result<UsageData, UsageError> {
         if eu.is_enabled.unwrap_or(false) {
             Some(ExtraUsageInfo {
                 enabled: true,
-                monthly_limit: eu.monthly_limit.unwrap_or(0.0),
-                used_credits: eu.used_credits.unwrap_or(0.0),
+                monthly_limit: eu.monthly_limit.unwrap_or(0.0) / 100.0,
+                used_credits: eu.used_credits.unwrap_or(0.0) / 100.0,
                 utilization: eu.utilization.unwrap_or(0.0) / 100.0,
             })
         } else {

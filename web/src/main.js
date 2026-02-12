@@ -7,11 +7,14 @@ let countdownTimer = null;
 let countdown = 60;
 let isDetached = false;
 
-const SESSION_MAX_AGE = 86400; // 24 hours - shows previous 5hr windows too
+const SESSION_MAX_AGE = 18000; // 5 hours
 const WEEKLY_MAX_AGE = 604800; // 7 days in seconds
 const THEME_KEY = "claudit-theme";
 const COSTS_COLLAPSED_KEY = "claudit-costs-collapsed";
 const STAY_ON_TOP_KEY = "claudit-stay-on-top";
+
+const sparklineData = {};
+const sparklineOffsets = {};
 
 function initTheme() {
   const stored = localStorage.getItem(THEME_KEY);
@@ -140,6 +143,121 @@ function getMaxAgeForLabel(label) {
   return WEEKLY_MAX_AGE;
 }
 
+function isSessionLimit(label) {
+  const lower = label.toLowerCase();
+  return lower.includes("session") || lower.includes("5hr");
+}
+
+function getWindowBounds(offset, resetAt) {
+  const end = resetAt + offset * SESSION_MAX_AGE;
+  const start = end - SESSION_MAX_AGE;
+  return { start, end };
+}
+
+function formatWindowLabel(start, end) {
+  const startDate = new Date(start * 1000);
+  const endDate = new Date(end * 1000);
+
+  const formatTime = (d) => {
+    const h = d.getHours();
+    const ampm = h >= 12 ? "pm" : "am";
+    const h12 = h % 12 || 12;
+    const min = d.getMinutes();
+    return min > 0 ? `${h12}:${String(min).padStart(2, "0")}${ampm}` : `${h12}${ampm}`;
+  };
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const sameDay = startDate.toDateString() === endDate.toDateString();
+
+  if (sameDay) {
+    return `${formatTime(startDate)} - ${formatTime(endDate)}`;
+  }
+  return `${monthNames[startDate.getMonth()]} ${startDate.getDate()} ${formatTime(startDate)} - ${monthNames[endDate.getMonth()]} ${endDate.getDate()} ${formatTime(endDate)}`;
+}
+
+function renderWindowSparkline(dataPoints, start, end, color) {
+  const filtered = dataPoints.filter((p) => p.timestamp >= start && p.timestamp <= end);
+
+  const width = 318;
+  const height = 36;
+
+  if (filtered.length < 2) {
+    return `<div class="sparkline">
+      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+        <text x="${width / 2}" y="${height / 2 + 4}" text-anchor="middle" fill="var(--text-dim)" font-size="11" font-family="-apple-system, sans-serif">No data</text>
+      </svg>
+    </div>`;
+  }
+
+  const padTop = 2;
+  const padBottom = 2;
+  const chartHeight = height - padTop - padBottom;
+  const timeRange = end - start || 1;
+
+  const points = filtered.map((p) => ({
+    x: ((p.timestamp - start) / timeRange) * width,
+    y: padTop + chartHeight - Math.min(1, Math.max(0, p.value)) * chartHeight,
+  }));
+
+  const linePoints = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const areaPoints =
+    `${points[0].x.toFixed(1)},${height} ` +
+    linePoints +
+    ` ${points[points.length - 1].x.toFixed(1)},${height}`;
+
+  const gradId = "sg-" + Math.random().toString(36).slice(2, 8);
+
+  return `<div class="sparkline">
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="${color}" stop-opacity="0.05"/>
+        </linearGradient>
+      </defs>
+      <polygon points="${areaPoints}" fill="url(#${gradId})"/>
+      <polyline points="${linePoints}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+  </div>`;
+}
+
+function renderNavigableSparkline(label, dataPoints, color, resetAt) {
+  const offset = sparklineOffsets[label] || 0;
+  const { start, end } = getWindowBounds(offset, resetAt);
+  const sparkline = renderWindowSparkline(dataPoints, start, end, color);
+  const timeLabel = formatWindowLabel(start, end);
+
+  const hasOlderData = dataPoints.some((p) => p.timestamp < start);
+  const atCurrent = offset >= 0;
+
+  const prevDisabled = !hasOlderData ? "disabled" : "";
+  const nextDisabled = atCurrent ? "disabled" : "";
+
+  return `<div class="sparkline-nav" data-label="${escapeHtml(label)}">
+    <div class="sparkline-nav-header">
+      <button class="sparkline-prev" ${prevDisabled}>&lt;</button>
+      <span class="sparkline-range">${timeLabel}</span>
+      <button class="sparkline-next" ${nextDisabled}>&gt;</button>
+    </div>
+    ${sparkline}
+  </div>`;
+}
+
+function navigateSparkline(label, direction) {
+  if (!sparklineOffsets[label]) sparklineOffsets[label] = 0;
+  sparklineOffsets[label] += direction;
+  if (sparklineOffsets[label] > 0) sparklineOffsets[label] = 0;
+
+  const stored = sparklineData[label];
+  if (!stored) return;
+
+  const newHtml = renderNavigableSparkline(label, stored.dataPoints, stored.color, stored.resetAt);
+  const container = document.querySelector(`.sparkline-nav[data-label="${label}"]`);
+  if (container) {
+    container.outerHTML = newHtml;
+  }
+}
+
 function renderUsage(data) {
   const loading = document.getElementById("usage-loading");
   const errorEl = document.getElementById("usage-error");
@@ -170,9 +288,17 @@ function renderUsage(data) {
       const resetText = limit.reset_at ? formatReset(limit.reset_at) : "";
 
       const historyPoints = getHistoryForLabel(history, limit.label);
-      const maxAge = getMaxAgeForLabel(limit.label);
       const color = getColorForPct(pct);
-      const sparkline = renderSparkline(historyPoints, maxAge, color);
+
+      let sparkline;
+      if (isSessionLimit(limit.label)) {
+        const resetAt = limit.reset_at ? Math.floor(new Date(limit.reset_at).getTime() / 1000) : Math.floor(Date.now() / 1000);
+        sparklineData[limit.label] = { dataPoints: historyPoints, color, resetAt };
+        sparkline = renderNavigableSparkline(limit.label, historyPoints, color, resetAt);
+      } else {
+        const maxAge = getMaxAgeForLabel(limit.label);
+        sparkline = renderSparkline(historyPoints, maxAge, color);
+      }
 
       return `
         <div class="limit-item">
@@ -201,7 +327,7 @@ function renderUsage(data) {
       <div class="limit-item">
         <div class="limit-header">
           <span class="limit-label">Extra Usage</span>
-          <span class="limit-pct" style="color: var(--${colorClass})">$${eu.used_credits.toFixed(0)} / $${eu.monthly_limit.toFixed(0)}</span>
+          <span class="limit-pct" style="color: var(--${colorClass})">${formatCost(eu.used_credits)} / ${formatCost(eu.monthly_limit)}</span>
         </div>
         <div class="progress-track">
           <div class="progress-fill ${colorClass}" style="width: ${pct}%"></div>
@@ -456,6 +582,33 @@ document.addEventListener("DOMContentLoaded", () => {
     checkForUpdates();
   });
   document.getElementById("costs-header").addEventListener("click", toggleCostsCollapsed);
+
+  // Sparkline navigation: delegated click handlers
+  document.getElementById("usage-limits").addEventListener("click", (e) => {
+    const btn = e.target.closest(".sparkline-prev, .sparkline-next");
+    if (!btn || btn.disabled) return;
+    const nav = btn.closest(".sparkline-nav");
+    if (!nav) return;
+    const label = nav.getAttribute("data-label");
+    const direction = btn.classList.contains("sparkline-prev") ? -1 : 1;
+    navigateSparkline(label, direction);
+  });
+
+  // Trackpad swipe navigation for sparklines
+  let swipeAccum = 0;
+  document.getElementById("usage-limits").addEventListener("wheel", (e) => {
+    const nav = e.target.closest(".sparkline-nav");
+    if (!nav) return;
+    if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    swipeAccum += e.deltaX;
+    if (Math.abs(swipeAccum) >= 50) {
+      const label = nav.getAttribute("data-label");
+      const direction = swipeAccum > 0 ? -1 : 1;
+      navigateSparkline(label, direction);
+      swipeAccum = 0;
+    }
+  }, { passive: false });
 
   document.querySelector(".panel").addEventListener("mousedown", (e) => {
     if (!isDetached) return;

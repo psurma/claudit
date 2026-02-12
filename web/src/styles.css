@@ -233,6 +233,44 @@ h2 {
   display: block;
 }
 
+.sparkline-nav {
+  margin-top: 4px;
+}
+
+.sparkline-nav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.sparkline-prev,
+.sparkline-next {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+.sparkline-prev:hover:not(:disabled),
+.sparkline-next:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.sparkline-prev:disabled,
+.sparkline-next:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.sparkline-range {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
 /* Preferences section */
 #prefs-section {
   padding: 8px 0 4px;

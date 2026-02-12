@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.2 (2026-02-12)
+
+### Fixed
+- Extra Usage now displays dollars correctly (API returns cents, was showing $2008 instead of $20.08)
+
+### Changed
+- Session sparkline reverted to 5-hour window with navigable prev/next arrows
+- Arrow buttons and trackpad horizontal swipe to browse previous 5-hour windows
+- Each window shows start/end time labels (e.g. "2pm - 7pm")
+- "No data" shown for empty windows
+- Weekly sparklines remain unchanged
+
 ## 0.6.1 (2026-02-12)
 
 ### Fixed
