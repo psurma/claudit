@@ -58,9 +58,9 @@ function updateThemeIcon(theme) {
   }
 }
 
-async function fetchAndRender() {
+async function fetchAndRender(silent = false) {
   const btn = document.getElementById("refresh-btn");
-  btn.classList.add("spinning");
+  if (!silent) btn.classList.add("spinning");
 
   try {
     const data = await invoke("get_all_data");
@@ -70,7 +70,7 @@ async function fetchAndRender() {
   } catch (e) {
     console.error("Failed to fetch data:", e);
   } finally {
-    btn.classList.remove("spinning");
+    if (!silent) btn.classList.remove("spinning");
     resetCountdown();
   }
 }
@@ -748,7 +748,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   listen("panel-shown", () => {
-    fetchAndRender();
+    fetchAndRender(true);
     startAutoRefresh();
   });
 
