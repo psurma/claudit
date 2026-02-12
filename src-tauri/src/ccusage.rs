@@ -129,11 +129,34 @@ pub async fn fetch_costs(cache: &CostCache) -> Result<CostData, CcusageError> {
     Ok(costs)
 }
 
+fn home_dir_string() -> Option<String> {
+    dirs::home_dir().map(|p| p.to_string_lossy().to_string())
+}
+
 fn find_ccusage() -> Result<String, CcusageError> {
-    let candidates = [
-        "/Users/pete/.npm-global/bin/ccusage",
-        "/usr/local/bin/ccusage",
-        "/opt/homebrew/bin/ccusage",
+    let home = home_dir_string().unwrap_or_default();
+
+    #[cfg(target_os = "macos")]
+    let candidates: Vec<String> = vec![
+        format!("{}/.npm-global/bin/ccusage", home),
+        "/opt/homebrew/bin/ccusage".to_string(),
+        "/usr/local/bin/ccusage".to_string(),
+    ];
+
+    #[cfg(target_os = "windows")]
+    let candidates: Vec<String> = {
+        let appdata = std::env::var("APPDATA").unwrap_or_default();
+        vec![
+            format!("{}\\npm\\ccusage.cmd", appdata),
+            format!("{}\\AppData\\Roaming\\npm\\ccusage.cmd", home),
+        ]
+    };
+
+    #[cfg(target_os = "linux")]
+    let candidates: Vec<String> = vec![
+        format!("{}/.npm-global/bin/ccusage", home),
+        "/usr/local/bin/ccusage".to_string(),
+        "/usr/bin/ccusage".to_string(),
     ];
 
     for path in &candidates {
@@ -142,7 +165,9 @@ fn find_ccusage() -> Result<String, CcusageError> {
         }
     }
 
-    if let Ok(output) = std::process::Command::new("which").arg("ccusage").output() {
+    // Fall back to which/where
+    let which_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
+    if let Ok(output) = std::process::Command::new(which_cmd).arg("ccusage").output() {
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() {
@@ -155,11 +180,29 @@ fn find_ccusage() -> Result<String, CcusageError> {
 }
 
 fn build_path() -> String {
-    let extra = [
-        "/Users/pete/.npm-global/bin",
-        "/usr/local/bin",
-        "/opt/homebrew/bin",
+    let home = home_dir_string().unwrap_or_default();
+
+    #[cfg(target_os = "macos")]
+    let extra: Vec<String> = vec![
+        format!("{}/.npm-global/bin", home),
+        "/usr/local/bin".to_string(),
+        "/opt/homebrew/bin".to_string(),
     ];
+
+    #[cfg(target_os = "windows")]
+    let extra: Vec<String> = {
+        let appdata = std::env::var("APPDATA").unwrap_or_default();
+        vec![format!("{}\\npm", appdata)]
+    };
+
+    #[cfg(target_os = "linux")]
+    let extra: Vec<String> = vec![
+        format!("{}/.npm-global/bin", home),
+        "/usr/local/bin".to_string(),
+        "/usr/bin".to_string(),
+    ];
+
+    let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
     let current = std::env::var("PATH").unwrap_or_default();
-    format!("{}:{}", extra.join(":"), current)
+    format!("{}{}{}", extra.join(sep), sep, current)
 }

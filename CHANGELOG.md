@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.3 (2026-02-12)
+
+### Added
+- Cross-platform support: Windows and Linux builds now possible alongside macOS
+- Windows credential manager and Linux libsecret support via `keyring` crate
+- Platform-specific ccusage path detection (Homebrew, npm global, AppData, etc.)
+- Windows (`windows`) and Linux (`deb`, `appimage`) bundle targets in config
+- Center-screen fallback positioning for Linux (tray click position may be unavailable)
+
+### Changed
+- Replaced `core-graphics` cursor detection with tray event position (cross-platform)
+- Log file now uses `std::env::temp_dir()` instead of hardcoded `/tmp/`
+- Home directory detection uses `dirs` crate instead of hardcoded paths
+- CSS font stack updated: `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Ubuntu", sans-serif`
+- Uses `where` on Windows and `which` on Unix for ccusage fallback lookup
+- Uses `;` PATH separator on Windows, `:` on Unix
+
+### Fixed
+- Panel border removed in docked mode (box-shadow is sufficient), border retained in detached mode
+
+### Removed
+- `core-graphics` dependency (was macOS-only)
+
 ## 0.6.2 (2026-02-12)
 
 ### Fixed

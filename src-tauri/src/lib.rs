@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
+    Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder,
 };
 
 const PANEL_LABEL: &str = "panel";
@@ -21,16 +21,17 @@ pub static PANEL_DETACHED: AtomicBool = AtomicBool::new(false);
 pub static STAY_ON_TOP_DETACHED: AtomicBool = AtomicBool::new(false);
 
 pub fn log(msg: &str) {
+    let log_path = std::env::temp_dir().join("claudit_debug.log");
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open("/tmp/claudit_debug.log")
+        .open(log_path)
     {
         let _ = writeln!(f, "[{}] {}", chrono::Local::now().format("%H:%M:%S%.3f"), msg);
     }
 }
 
-fn show_panel(app: &tauri::AppHandle) {
+fn show_panel(app: &tauri::AppHandle, cursor_pos: Option<PhysicalPosition<f64>>) {
     if let Some(w) = app.get_webview_window(PANEL_LABEL) {
         log("Showing panel");
 
@@ -44,28 +45,23 @@ fn show_panel(app: &tauri::AppHandle) {
             return;
         }
 
-        let cg_point = core_graphics::event::CGEvent::new(
-            core_graphics::event_source::CGEventSource::new(
-                core_graphics::event_source::CGEventSourceStateID::HIDSystemState,
-            ).ok().unwrap(),
-        ).map(|e| e.location());
-
-        if let Ok(cursor) = cg_point {
-            log(&format!("CG cursor at ({}, {})", cursor.x, cursor.y));
+        if let Some(pos) = cursor_pos {
+            log(&format!("Tray click at physical ({}, {})", pos.x, pos.y));
             if let Ok(monitors) = app.available_monitors() {
                 for mon in monitors {
-                    let pos = mon.position();
+                    let mpos = mon.position();
                     let size = mon.size();
                     let sf = mon.scale_factor();
-                    let mx = pos.x as f64 / sf;
-                    let my = pos.y as f64 / sf;
+                    // Convert physical click position to logical
+                    let cx = pos.x / sf;
+                    let cy = pos.y / sf;
+                    let mx = mpos.x as f64 / sf;
+                    let my = mpos.y as f64 / sf;
                     let mw = size.width as f64 / sf;
                     let mh = size.height as f64 / sf;
                     log(&format!("Monitor: logical ({}, {}) {}x{} sf={}", mx, my, mw, mh, sf));
-                    if cursor.x >= mx && cursor.x < mx + mw
-                        && cursor.y >= my && cursor.y < my + mh
-                    {
-                        let x = (cursor.x - PANEL_WIDTH / 2.0).max(mx).min(mx + mw - PANEL_WIDTH);
+                    if cx >= mx && cx < mx + mw && cy >= my && cy < my + mh {
+                        let x = (cx - PANEL_WIDTH / 2.0).max(mx).min(mx + mw - PANEL_WIDTH);
                         let y = my + 30.0;
                         log(&format!("Moving panel to ({}, {})", x, y));
                         let _ = w.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
@@ -74,8 +70,16 @@ fn show_panel(app: &tauri::AppHandle) {
                 }
             }
         } else {
-            log("Could not get CG cursor position");
+            // Fallback: center on primary monitor (e.g. Linux where tray position may be unavailable)
+            log("No cursor position, centering on primary monitor");
+            if let Ok(Some(mon)) = app.primary_monitor() {
+                let sf = mon.scale_factor();
+                let mw = mon.size().width as f64 / sf;
+                let x = (mw - PANEL_WIDTH) / 2.0;
+                let _ = w.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, 30.0)));
+            }
         }
+
         let _ = w.show();
         let _ = w.set_focus();
         PANEL_VISIBLE.store(true, Ordering::SeqCst);
@@ -154,15 +158,15 @@ pub fn run() {
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
-                        show_panel(tray.app_handle());
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, position, .. } = event {
+                        show_panel(tray.app_handle(), Some(position));
                     }
                 })
                 .on_menu_event(|app, event| {
                     log(&format!("Menu event: {:?}", event.id()));
                     match event.id().as_ref() {
                         "refresh" => {
-                            show_panel(app);
+                            show_panel(app, None);
                         }
                         "quit" => {
                             log("Quitting");

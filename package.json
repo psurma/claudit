@@ -1,7 +1,7 @@
 {
   "name": "claudit",
-  "version": "0.6.2",
-  "description": "macOS menu bar app showing Claude Code usage limits and estimated costs",
+  "version": "0.6.3",
+  "description": "Menu bar app showing Claude Code usage limits and estimated costs",
   "private": true,
   "scripts": {
     "tauri": "tauri",
