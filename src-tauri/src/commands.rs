@@ -4,6 +4,7 @@ use crate::keychain;
 use crate::usage_api::{self, UsageData};
 use crate::log;
 use serde::Serialize;
+use std::sync::atomic::Ordering;
 use tauri::{Emitter, Manager, State};
 
 #[derive(Debug, Clone, Serialize)]
@@ -99,7 +100,7 @@ pub async fn get_all_data(app: tauri::AppHandle, cost_cache: State<'_, CostCache
 
 #[tauri::command]
 pub async fn hide_panel(app: tauri::AppHandle) -> Result<(), ()> {
-    crate::PANEL_VISIBLE.store(false, std::sync::atomic::Ordering::SeqCst);
+    crate::PANEL_VISIBLE.store(false, Ordering::SeqCst);
     if let Some(window) = app.get_webview_window("panel") {
         let _ = window.hide();
     }
@@ -110,10 +111,11 @@ pub async fn hide_panel(app: tauri::AppHandle) -> Result<(), ()> {
 pub async fn detach_panel(app: tauri::AppHandle) -> Result<(), ()> {
     log("detach_panel: detaching");
     if let Some(window) = app.get_webview_window("panel") {
-        let _ = window.set_always_on_top(false);
+        let stay_on_top = crate::STAY_ON_TOP_DETACHED.load(Ordering::SeqCst);
+        let _ = window.set_always_on_top(stay_on_top);
         let _ = window.set_resizable(true);
         let _ = window.set_min_size(Some(tauri::LogicalSize::new(300.0, 400.0)));
-        crate::PANEL_DETACHED.store(true, std::sync::atomic::Ordering::SeqCst);
+        crate::PANEL_DETACHED.store(true, Ordering::SeqCst);
         let _ = app.emit("panel-detached", ());
         log("detach_panel: done");
     }
@@ -128,11 +130,95 @@ pub async fn attach_panel(app: tauri::AppHandle) -> Result<(), ()> {
         let _ = window.set_resizable(false);
         let _ = window.set_min_size(None::<tauri::LogicalSize<f64>>);
         let _ = window.set_size(tauri::LogicalSize::new(crate::PANEL_WIDTH, crate::PANEL_HEIGHT));
-        crate::PANEL_DETACHED.store(false, std::sync::atomic::Ordering::SeqCst);
-        crate::PANEL_VISIBLE.store(false, std::sync::atomic::Ordering::SeqCst);
+        crate::PANEL_DETACHED.store(false, Ordering::SeqCst);
+        crate::PANEL_VISIBLE.store(false, Ordering::SeqCst);
         let _ = window.hide();
         let _ = app.emit("panel-attached", ());
         log("attach_panel: done, panel hidden");
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn set_stay_on_top_pref(enabled: bool) -> Result<(), ()> {
+    log(&format!("set_stay_on_top_pref: {}", enabled));
+    crate::STAY_ON_TOP_DETACHED.store(enabled, Ordering::SeqCst);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_stay_on_top_pref() -> Result<bool, ()> {
+    Ok(crate::STAY_ON_TOP_DETACHED.load(Ordering::SeqCst))
+}
+
+#[tauri::command]
+pub async fn get_autostart_enabled(app: tauri::AppHandle) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let manager = app.autolaunch();
+    manager.is_enabled().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn set_autostart_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let manager = app.autolaunch();
+    if enabled {
+        manager.enable().map_err(|e| e.to_string())
+    } else {
+        manager.disable().map_err(|e| e.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UpdateInfo {
+    pub current_version: String,
+    pub latest_version: String,
+    pub update_available: bool,
+    pub release_url: String,
+}
+
+#[tauri::command]
+pub async fn check_for_updates() -> Result<UpdateInfo, String> {
+    log("check_for_updates: fetching latest release");
+    let client = reqwest::Client::new();
+    let resp = client
+        .get("https://api.github.com/repos/psurma/claudit/releases/latest")
+        .header("User-Agent", "Claudit")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if resp.status() == 404 {
+        let current = env!("CARGO_PKG_VERSION").to_string();
+        return Ok(UpdateInfo {
+            current_version: current,
+            latest_version: "unknown".to_string(),
+            update_available: false,
+            release_url: "https://github.com/psurma/claudit/releases".to_string(),
+        });
+    }
+
+    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let tag = body["tag_name"].as_str().unwrap_or("unknown");
+    let latest = tag.strip_prefix('v').unwrap_or(tag).to_string();
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    let html_url = body["html_url"]
+        .as_str()
+        .unwrap_or("https://github.com/psurma/claudit/releases")
+        .to_string();
+
+    let update_available = latest != "unknown" && latest != current;
+
+    log(&format!(
+        "check_for_updates: current={}, latest={}, update={}",
+        current, latest, update_available
+    ));
+
+    Ok(UpdateInfo {
+        current_version: current,
+        latest_version: latest,
+        update_available,
+        release_url: html_url,
+    })
 }

@@ -114,6 +114,7 @@ body {
   gap: 6px;
 }
 
+#prefs-btn,
 #theme-toggle,
 #detach-btn,
 #refresh-btn {
@@ -128,11 +129,17 @@ body {
   transition: color 0.15s, border-color 0.15s;
 }
 
+#prefs-btn:hover,
 #theme-toggle:hover,
 #detach-btn:hover,
 #refresh-btn:hover {
   color: var(--text);
   border-color: var(--text-dim);
+}
+
+#prefs-btn.active {
+  color: var(--blue);
+  border-color: var(--blue);
 }
 
 #refresh-btn.spinning svg {
@@ -224,6 +231,124 @@ h2 {
 
 .sparkline svg {
   display: block;
+}
+
+/* Preferences section */
+#prefs-section {
+  padding: 8px 0 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pref-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.pref-label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 14px;
+  width: 14px;
+  left: 2px;
+  bottom: 2px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+  background: #fff;
+}
+
+/* Collapsible section headers */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.section-header:hover {
+  color: var(--text);
+}
+
+.chevron {
+  transition: transform 0.2s ease;
+}
+
+.chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+#costs-content.collapsed {
+  display: none;
+}
+
+/* Update row */
+.update-row {
+  font-size: 12px;
+}
+
+.update-row .pref-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+#update-status {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+#update-status a {
+  color: var(--blue);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+#update-status a:hover {
+  text-decoration: underline;
 }
 
 .divider {

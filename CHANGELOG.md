@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 (2026-02-12)
+
+### Added
+- Preferences pane with gear icon button in the header
+- "Start on system startup" toggle using macOS LaunchAgent (tauri-plugin-autostart)
+- "Stay on top when undocked" toggle, persisted across sessions
+- Version display and "Check for updates" link that queries GitHub releases
+- Collapsible "Estimated Costs" section with chevron indicator
+- Costs collapsed state persisted in localStorage
+
 ## 0.5.0 (2026-02-12)
 
 ### Added

@@ -10,6 +10,8 @@ let isDetached = false;
 const SESSION_MAX_AGE = 18000; // 5 hours in seconds
 const WEEKLY_MAX_AGE = 604800; // 7 days in seconds
 const THEME_KEY = "claudit-theme";
+const COSTS_COLLAPSED_KEY = "claudit-costs-collapsed";
+const STAY_ON_TOP_KEY = "claudit-stay-on-top";
 
 function initTheme() {
   const stored = localStorage.getItem(THEME_KEY);
@@ -290,6 +292,101 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// --- Preferences ---
+
+let prefsOpen = false;
+
+function togglePrefs() {
+  prefsOpen = !prefsOpen;
+  const section = document.getElementById("prefs-section");
+  const btn = document.getElementById("prefs-btn");
+  if (prefsOpen) {
+    section.style.display = "block";
+    btn.classList.add("active");
+    loadPrefs();
+  } else {
+    section.style.display = "none";
+    btn.classList.remove("active");
+  }
+}
+
+async function loadPrefs() {
+  try {
+    const enabled = await invoke("get_autostart_enabled");
+    document.getElementById("autostart-toggle").checked = enabled;
+  } catch (e) {
+    console.error("Failed to load autostart pref:", e);
+  }
+
+  const stayOnTop = localStorage.getItem(STAY_ON_TOP_KEY) === "true";
+  document.getElementById("stay-on-top-toggle").checked = stayOnTop;
+}
+
+async function handleAutostartChange(e) {
+  const enabled = e.target.checked;
+  try {
+    await invoke("set_autostart_enabled", { enabled });
+  } catch (err) {
+    console.error("Failed to set autostart:", err);
+    e.target.checked = !enabled;
+  }
+}
+
+async function handleStayOnTopChange(e) {
+  const enabled = e.target.checked;
+  localStorage.setItem(STAY_ON_TOP_KEY, enabled ? "true" : "false");
+  try {
+    await invoke("set_stay_on_top_pref", { enabled });
+  } catch (err) {
+    console.error("Failed to set stay-on-top pref:", err);
+  }
+}
+
+async function checkForUpdates() {
+  const statusEl = document.getElementById("update-status");
+  statusEl.textContent = "Checking...";
+  try {
+    const info = await invoke("check_for_updates");
+    document.getElementById("version-label").textContent = "v" + info.current_version;
+    if (info.update_available) {
+      statusEl.innerHTML =
+        'v' + escapeHtml(info.latest_version) + ' available - <a href="' +
+        escapeHtml(info.release_url) + '" target="_blank">Download</a>';
+    } else {
+      statusEl.textContent = "Up to date";
+    }
+  } catch (e) {
+    console.error("Update check failed:", e);
+    statusEl.textContent = "Check failed";
+  }
+}
+
+// --- Costs collapse ---
+
+function initCostsCollapse() {
+  const collapsed = localStorage.getItem(COSTS_COLLAPSED_KEY) === "true";
+  setCostsCollapsed(collapsed);
+}
+
+function toggleCostsCollapsed() {
+  const content = document.getElementById("costs-content");
+  const isCollapsed = content.classList.contains("collapsed");
+  setCostsCollapsed(!isCollapsed);
+}
+
+function setCostsCollapsed(collapsed) {
+  const content = document.getElementById("costs-content");
+  const chevron = document.querySelector("#costs-header .chevron");
+  if (collapsed) {
+    content.classList.add("collapsed");
+    chevron.classList.add("collapsed");
+  } else {
+    content.classList.remove("collapsed");
+    chevron.classList.remove("collapsed");
+  }
+  localStorage.setItem(COSTS_COLLAPSED_KEY, collapsed ? "true" : "false");
+}
+
 function resetCountdown() {
   countdown = 60;
   if (countdownTimer) clearInterval(countdownTimer);
@@ -336,6 +433,11 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
+  initCostsCollapse();
+
+  // Sync stay-on-top pref to Rust on startup
+  const stayOnTop = localStorage.getItem(STAY_ON_TOP_KEY) === "true";
+  invoke("set_stay_on_top_pref", { enabled: stayOnTop }).catch(() => {});
 
   document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
 
@@ -344,9 +446,21 @@ document.addEventListener("DOMContentLoaded", () => {
     startAutoRefresh();
   });
 
+  document.getElementById("prefs-btn").addEventListener("click", togglePrefs);
+  document.getElementById("autostart-toggle").addEventListener("change", handleAutostartChange);
+  document.getElementById("stay-on-top-toggle").addEventListener("change", handleStayOnTopChange);
+  document.getElementById("check-updates-link").addEventListener("click", (e) => {
+    e.preventDefault();
+    checkForUpdates();
+  });
+  document.getElementById("costs-header").addEventListener("click", toggleCostsCollapsed);
+
   document.querySelector(".panel").addEventListener("mousedown", (e) => {
     if (!isDetached) return;
     if (e.target.closest("button")) return;
+    if (e.target.closest(".section-header")) return;
+    if (e.target.closest("label")) return;
+    if (e.target.closest("a")) return;
     e.preventDefault();
     getCurrentWindow().startDragging();
   });

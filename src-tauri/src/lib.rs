@@ -18,6 +18,7 @@ const PANEL_HEIGHT: f64 = 620.0;
 
 pub static PANEL_VISIBLE: AtomicBool = AtomicBool::new(false);
 pub static PANEL_DETACHED: AtomicBool = AtomicBool::new(false);
+pub static STAY_ON_TOP_DETACHED: AtomicBool = AtomicBool::new(false);
 
 pub fn log(msg: &str) {
     if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -91,7 +92,18 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(ccusage::CostCache::new())
-        .invoke_handler(tauri::generate_handler![commands::get_all_data, commands::hide_panel, commands::detach_panel, commands::attach_panel])
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+        .invoke_handler(tauri::generate_handler![
+            commands::get_all_data,
+            commands::hide_panel,
+            commands::detach_panel,
+            commands::attach_panel,
+            commands::set_stay_on_top_pref,
+            commands::get_stay_on_top_pref,
+            commands::get_autostart_enabled,
+            commands::set_autostart_enabled,
+            commands::check_for_updates,
+        ])
         .setup(|app| {
             log("Setup starting");
 
