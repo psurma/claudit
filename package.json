@@ -1,0 +1,14 @@
+{
+  "name": "claudit",
+  "version": "0.5.0",
+  "description": "macOS menu bar app showing Claude Code usage limits and estimated costs",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

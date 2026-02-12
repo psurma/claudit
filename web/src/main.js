@@ -1,0 +1,377 @@
+const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
+const { getCurrentWindow } = window.__TAURI__.window;
+
+let refreshTimer = null;
+let countdownTimer = null;
+let countdown = 60;
+let isDetached = false;
+
+const SESSION_MAX_AGE = 18000; // 5 hours in seconds
+const WEEKLY_MAX_AGE = 604800; // 7 days in seconds
+const THEME_KEY = "claudit-theme";
+
+function initTheme() {
+  const stored = localStorage.getItem(THEME_KEY);
+  if (stored) {
+    setTheme(stored);
+  } else {
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    setTheme(prefersDark ? "dark" : "light");
+  }
+
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+      setTheme(e.matches ? "dark" : "light");
+    }
+  });
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  updateThemeIcon(theme);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-theme");
+  const next = current === "dark" ? "light" : "dark";
+  localStorage.setItem(THEME_KEY, next);
+  setTheme(next);
+}
+
+function updateThemeIcon(theme) {
+  const moonIcon = document.getElementById("icon-moon");
+  const sunIcon = document.getElementById("icon-sun");
+  if (!moonIcon || !sunIcon) return;
+
+  if (theme === "dark") {
+    moonIcon.style.display = "";
+    sunIcon.style.display = "none";
+  } else {
+    moonIcon.style.display = "none";
+    sunIcon.style.display = "";
+  }
+}
+
+async function fetchAndRender() {
+  const btn = document.getElementById("refresh-btn");
+  btn.classList.add("spinning");
+
+  try {
+    const data = await invoke("get_all_data");
+    renderUsage(data);
+    renderCosts(data);
+    document.getElementById("timestamp").textContent = "Updated " + data.timestamp;
+  } catch (e) {
+    console.error("Failed to fetch data:", e);
+  } finally {
+    btn.classList.remove("spinning");
+    resetCountdown();
+  }
+}
+
+function getHistoryForLabel(history, label) {
+  if (!history || !Array.isArray(history)) return [];
+  return history
+    .filter((s) => s.buckets && s.buckets[label] !== undefined)
+    .map((s) => ({ timestamp: s.timestamp, value: s.buckets[label] }));
+}
+
+function renderSparkline(dataPoints, maxAgeSeconds, color) {
+  if (!dataPoints || dataPoints.length < 2) return "";
+
+  const now = Math.floor(Date.now() / 1000);
+  const cutoff = now - maxAgeSeconds;
+  const filtered = dataPoints.filter((p) => p.timestamp >= cutoff);
+
+  if (filtered.length < 2) return "";
+
+  const width = 318;
+  const height = 36;
+  const padTop = 2;
+  const padBottom = 2;
+  const chartHeight = height - padTop - padBottom;
+
+  const minTime = filtered[0].timestamp;
+  const maxTime = filtered[filtered.length - 1].timestamp;
+  const timeRange = maxTime - minTime || 1;
+
+  // Values are 0-1 (percentage as decimal), clamp to 0-1
+  const points = filtered.map((p) => ({
+    x: ((p.timestamp - minTime) / timeRange) * width,
+    y: padTop + chartHeight - Math.min(1, Math.max(0, p.value)) * chartHeight,
+  }));
+
+  const linePoints = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const areaPoints =
+    `0,${height} ` +
+    `${points[0].x.toFixed(1)},${points[0].y.toFixed(1)} ` +
+    linePoints +
+    ` ${points[points.length - 1].x.toFixed(1)},${height}`;
+
+  const gradId = "sg-" + Math.random().toString(36).slice(2, 8);
+
+  return `<div class="sparkline">
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="${color}" stop-opacity="0.05"/>
+        </linearGradient>
+      </defs>
+      <polygon points="${areaPoints}" fill="url(#${gradId})"/>
+      <polyline points="${linePoints}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+  </div>`;
+}
+
+function getColorForPct(pct) {
+  if (pct >= 90) return "var(--red)";
+  if (pct >= 70) return "var(--amber)";
+  return "var(--green)";
+}
+
+function getMaxAgeForLabel(label) {
+  if (label.toLowerCase().includes("session") || label.toLowerCase().includes("5hr")) {
+    return SESSION_MAX_AGE;
+  }
+  return WEEKLY_MAX_AGE;
+}
+
+function renderUsage(data) {
+  const loading = document.getElementById("usage-loading");
+  const errorEl = document.getElementById("usage-error");
+  const limitsEl = document.getElementById("usage-limits");
+
+  loading.style.display = "none";
+
+  if (data.usage_error) {
+    errorEl.style.display = "block";
+    errorEl.textContent = data.usage_error;
+    limitsEl.innerHTML = "";
+    return;
+  }
+
+  errorEl.style.display = "none";
+
+  if (!data.usage || !data.usage.limits || data.usage.limits.length === 0) {
+    limitsEl.innerHTML = '<div class="loading">No usage limits found</div>';
+    return;
+  }
+
+  const history = data.usage_history;
+
+  limitsEl.innerHTML = data.usage.limits
+    .map((limit) => {
+      const pct = Math.min(100, Math.round(limit.usage_pct * 100));
+      const colorClass = pct >= 90 ? "red" : pct >= 70 ? "amber" : "green";
+      const resetText = limit.reset_at ? formatReset(limit.reset_at) : "";
+
+      const historyPoints = getHistoryForLabel(history, limit.label);
+      const maxAge = getMaxAgeForLabel(limit.label);
+      const color = getColorForPct(pct);
+      const sparkline = renderSparkline(historyPoints, maxAge, color);
+
+      return `
+        <div class="limit-item">
+          <div class="limit-header">
+            <span class="limit-label">${escapeHtml(limit.label)}</span>
+            <span class="limit-pct" style="color: var(--${colorClass})">${pct}%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill ${colorClass}" style="width: ${pct}%"></div>
+          </div>
+          ${resetText ? `<div class="limit-reset">Resets ${resetText}</div>` : ""}
+          ${sparkline}
+        </div>
+      `;
+    })
+    .join("");
+
+  // Render extra usage (overages) if present
+  const extraEl = document.getElementById("extra-usage");
+  if (data.usage.extra_usage) {
+    const eu = data.usage.extra_usage;
+    const pct = Math.min(100, Math.round(eu.utilization * 100));
+    const colorClass = pct >= 90 ? "red" : pct >= 70 ? "amber" : "green";
+    extraEl.style.display = "block";
+    extraEl.innerHTML = `
+      <div class="limit-item">
+        <div class="limit-header">
+          <span class="limit-label">Extra Usage</span>
+          <span class="limit-pct" style="color: var(--${colorClass})">$${eu.used_credits.toFixed(0)} / $${eu.monthly_limit.toFixed(0)}</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill ${colorClass}" style="width: ${pct}%"></div>
+        </div>
+      </div>
+    `;
+  } else {
+    extraEl.style.display = "none";
+  }
+}
+
+function renderCosts(data) {
+  const loading = document.getElementById("costs-loading");
+  const errorEl = document.getElementById("costs-error");
+  const dataEl = document.getElementById("costs-data");
+
+  loading.style.display = "none";
+
+  if (data.costs_error) {
+    errorEl.style.display = "block";
+    errorEl.textContent = data.costs_error;
+    dataEl.style.display = "none";
+    return;
+  }
+
+  errorEl.style.display = "none";
+
+  if (!data.costs) {
+    dataEl.style.display = "none";
+    return;
+  }
+
+  dataEl.style.display = "block";
+  document.getElementById("cost-today").textContent = formatCost(data.costs.today);
+  document.getElementById("cost-week").textContent = formatCost(data.costs.week);
+  document.getElementById("cost-month").textContent = formatCost(data.costs.month);
+}
+
+function formatCost(value) {
+  if (value === 0) return "$0.00";
+  return "$" + value.toFixed(2);
+}
+
+function formatReset(isoString) {
+  try {
+    const reset = new Date(isoString);
+    const now = new Date();
+    const diffMs = reset - now;
+
+    if (diffMs <= 0) return "soon";
+
+    const days = Math.floor(diffMs / 86400000);
+    const hours = Math.floor((diffMs % 86400000) / 3600000);
+    const minutes = Math.floor((diffMs % 3600000) / 60000);
+
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    parts.push(`${minutes}m`);
+
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const dayName = dayNames[reset.getDay()];
+    const date = reset.getDate();
+    const suffix = getOrdinalSuffix(date);
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = monthNames[reset.getMonth()];
+    const h = reset.getHours();
+    const ampm = h >= 12 ? "pm" : "am";
+    const h12 = h % 12 || 12;
+    const min = reset.getMinutes();
+    const timeStr = min > 0 ? `${h12}:${String(min).padStart(2, "0")}${ampm}` : `${h12}${ampm}`;
+
+    return `in ${parts.join(" ")} (${dayName} ${date}${suffix} ${month} ${timeStr})`;
+  } catch {
+    return "";
+  }
+}
+
+function getOrdinalSuffix(n) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function resetCountdown() {
+  countdown = 60;
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    countdown--;
+    if (countdown <= 0) {
+      countdown = 60;
+    }
+    document.getElementById("next-refresh").textContent =
+      "Auto-refresh in " + countdown + "s";
+  }, 1000);
+}
+
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(fetchAndRender, 60000);
+  resetCountdown();
+}
+
+function setDetachedUI(detached) {
+  isDetached = detached;
+  const popoutIcon = document.getElementById("icon-popout");
+  const dockinIcon = document.getElementById("icon-dockin");
+  const detachBtn = document.getElementById("detach-btn");
+  if (detached) {
+    document.body.classList.add("detached");
+    popoutIcon.style.display = "none";
+    dockinIcon.style.display = "";
+    detachBtn.title = "Dock panel";
+  } else {
+    document.body.classList.remove("detached");
+    popoutIcon.style.display = "";
+    dockinIcon.style.display = "none";
+    detachBtn.title = "Pop out panel";
+  }
+}
+
+// Dismiss on Escape key (only when docked)
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !isDetached) {
+    invoke("hide_panel");
+  }
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
+
+  document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+
+  document.getElementById("refresh-btn").addEventListener("click", () => {
+    fetchAndRender();
+    startAutoRefresh();
+  });
+
+  document.querySelector(".panel").addEventListener("mousedown", (e) => {
+    if (!isDetached) return;
+    if (e.target.closest("button")) return;
+    e.preventDefault();
+    getCurrentWindow().startDragging();
+  });
+
+  document.getElementById("detach-btn").addEventListener("click", () => {
+    if (isDetached) {
+      invoke("attach_panel");
+    } else {
+      invoke("detach_panel");
+    }
+  });
+
+  listen("panel-detached", () => {
+    setDetachedUI(true);
+  });
+
+  listen("panel-attached", () => {
+    setDetachedUI(false);
+  });
+
+  listen("panel-shown", () => {
+    fetchAndRender();
+    startAutoRefresh();
+  });
+
+  fetchAndRender();
+  startAutoRefresh();
+});
