@@ -272,6 +272,9 @@ pub async fn open_login() -> Result<(), String> {
 
 #[tauri::command]
 pub async fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("Only HTTP/HTTPS URLs are allowed".to_string());
+    }
     log(&format!("open_url: {}", url));
     #[cfg(target_os = "macos")]
     {
@@ -283,8 +286,8 @@ pub async fn open_url(url: String) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        tokio::process::Command::new("cmd")
-            .args(["/c", "start", &url])
+        tokio::process::Command::new("explorer")
+            .arg(&url)
             .output()
             .await
             .map_err(|e| e.to_string())?;

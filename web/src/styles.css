@@ -114,7 +114,6 @@ body {
 }
 
 #prefs-btn,
-#theme-toggle,
 #detach-btn,
 #refresh-btn {
   background: none;
@@ -129,7 +128,6 @@ body {
 }
 
 #prefs-btn:hover,
-#theme-toggle:hover,
 #detach-btn:hover,
 #refresh-btn:hover {
   color: var(--text);
@@ -482,9 +480,6 @@ body.detached .panel {
   border-radius: 0;
   border: 1px solid var(--border);
   box-shadow: none;
-}
-
-body.detached .panel {
   cursor: grab;
 }
 

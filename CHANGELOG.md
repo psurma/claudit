@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.8 (2026-02-16)
+
+### Changed
+- Moved light/dark mode toggle from header button into Settings as a "Dark mode" toggle switch
+- Consistent with existing preference toggles (autostart, stay on top)
+- Removed moon/sun icon button from header to reduce clutter
+
+### Security
+- `open_url` now validates URL scheme (only http/https allowed), preventing command injection
+- Windows: replaced `cmd /c start` with `explorer.exe` to avoid shell metacharacter interpretation
+- Enabled Content Security Policy (CSP) in Tauri config
+- Debug log moved from world-readable `/tmp/` to app data directory
+- Added try-catch around sparkline JSON.parse for defensive parsing
+
+### Improved
+- Extracted shared `formatTime12h()` and `MONTH_NAMES` constant (was duplicated 3x)
+- Extracted `getColorClass()` helper (was duplicated 2x)
+- Extracted `push_bucket()` helper in usage API (was duplicated 4x)
+- Merged duplicate CSS selector for detached panel
+
 ## 0.6.7 (2026-02-16)
 
 ### Fixed

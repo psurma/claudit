@@ -13,8 +13,28 @@ const THEME_KEY = "claudit-theme";
 const COSTS_COLLAPSED_KEY = "claudit-costs-collapsed";
 const STAY_ON_TOP_KEY = "claudit-stay-on-top";
 
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 const sparklineData = {};
 const sparklineOffsets = {};
+
+function formatTime12h(d) {
+  const h = d.getHours();
+  const ampm = h >= 12 ? "pm" : "am";
+  const h12 = h % 12 || 12;
+  const min = d.getMinutes();
+  return min > 0 ? `${h12}:${String(min).padStart(2, "0")}${ampm}` : `${h12}${ampm}`;
+}
+
+function getColorClass(pct) {
+  if (pct >= 90) return "red";
+  if (pct >= 70) return "amber";
+  return "green";
+}
+
+function getColorForPct(pct) {
+  return `var(--${getColorClass(pct)})`;
+}
 
 function initTheme() {
   const stored = localStorage.getItem(THEME_KEY);
@@ -34,28 +54,8 @@ function initTheme() {
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
-  updateThemeIcon(theme);
-}
-
-function toggleTheme() {
-  const current = document.documentElement.getAttribute("data-theme");
-  const next = current === "dark" ? "light" : "dark";
-  localStorage.setItem(THEME_KEY, next);
-  setTheme(next);
-}
-
-function updateThemeIcon(theme) {
-  const moonIcon = document.getElementById("icon-moon");
-  const sunIcon = document.getElementById("icon-sun");
-  if (!moonIcon || !sunIcon) return;
-
-  if (theme === "dark") {
-    moonIcon.style.display = "";
-    sunIcon.style.display = "none";
-  } else {
-    moonIcon.style.display = "none";
-    sunIcon.style.display = "";
-  }
+  const toggle = document.getElementById("darkmode-toggle");
+  if (toggle) toggle.checked = theme === "dark";
 }
 
 async function fetchAndRender(silent = false) {
@@ -131,11 +131,6 @@ function renderSparkline(dataPoints, maxAgeSeconds, color) {
   </div>`;
 }
 
-function getColorForPct(pct) {
-  if (pct >= 90) return "var(--red)";
-  if (pct >= 70) return "var(--amber)";
-  return "var(--green)";
-}
 
 function getMaxAgeForLabel(label) {
   if (label.toLowerCase().includes("session") || label.toLowerCase().includes("5hr")) {
@@ -158,22 +153,12 @@ function getWindowBounds(offset, resetAt) {
 function formatWindowLabel(start, end) {
   const startDate = new Date(start * 1000);
   const endDate = new Date(end * 1000);
-
-  const formatTime = (d) => {
-    const h = d.getHours();
-    const ampm = h >= 12 ? "pm" : "am";
-    const h12 = h % 12 || 12;
-    const min = d.getMinutes();
-    return min > 0 ? `${h12}:${String(min).padStart(2, "0")}${ampm}` : `${h12}${ampm}`;
-  };
-
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const sameDay = startDate.toDateString() === endDate.toDateString();
 
   if (sameDay) {
-    return `${formatTime(startDate)} - ${formatTime(endDate)}`;
+    return `${formatTime12h(startDate)} - ${formatTime12h(endDate)}`;
   }
-  return `${monthNames[startDate.getMonth()]} ${startDate.getDate()} ${formatTime(startDate)} - ${monthNames[endDate.getMonth()]} ${endDate.getDate()} ${formatTime(endDate)}`;
+  return `${MONTH_NAMES[startDate.getMonth()]} ${startDate.getDate()} ${formatTime12h(startDate)} - ${MONTH_NAMES[endDate.getMonth()]} ${endDate.getDate()} ${formatTime12h(endDate)}`;
 }
 
 function computePrediction(filtered, windowEnd) {
@@ -331,7 +316,7 @@ function renderUsage(data) {
   limitsEl.innerHTML = data.usage.limits
     .map((limit) => {
       const pct = Math.min(100, Math.round(limit.usage_pct * 100));
-      const colorClass = pct >= 90 ? "red" : pct >= 70 ? "amber" : "green";
+      const colorClass = getColorClass(pct);
       const resetText = limit.reset_at ? formatReset(limit.reset_at) : "";
 
       const historyPoints = getHistoryForLabel(history, limit.label);
@@ -368,7 +353,7 @@ function renderUsage(data) {
   if (data.usage.extra_usage) {
     const eu = data.usage.extra_usage;
     const pct = Math.min(100, Math.round(eu.utilization * 100));
-    const colorClass = pct >= 90 ? "red" : pct >= 70 ? "amber" : "green";
+    const colorClass = getColorClass(pct);
     extraEl.style.display = "block";
     extraEl.innerHTML = `
       <div class="limit-item">
@@ -439,15 +424,9 @@ function formatReset(isoString) {
     const dayName = dayNames[reset.getDay()];
     const date = reset.getDate();
     const suffix = getOrdinalSuffix(date);
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const month = monthNames[reset.getMonth()];
-    const h = reset.getHours();
-    const ampm = h >= 12 ? "pm" : "am";
-    const h12 = h % 12 || 12;
-    const min = reset.getMinutes();
-    const timeStr = min > 0 ? `${h12}:${String(min).padStart(2, "0")}${ampm}` : `${h12}${ampm}`;
+    const month = MONTH_NAMES[reset.getMonth()];
 
-    return `in ${parts.join(" ")} (${dayName} ${date}${suffix} ${month} ${timeStr})`;
+    return `in ${parts.join(" ")} (${dayName} ${date}${suffix} ${month} ${formatTime12h(reset)})`;
   } catch {
     return "";
   }
@@ -614,16 +593,9 @@ function formatTooltipTime(ts) {
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
 
-  const h = d.getHours();
-  const ampm = h >= 12 ? "pm" : "am";
-  const h12 = h % 12 || 12;
-  const min = d.getMinutes();
-  const timeStr = min > 0 ? `${h12}:${String(min).padStart(2, "0")}${ampm}` : `${h12}${ampm}`;
-
+  const timeStr = formatTime12h(d);
   if (isToday) return timeStr;
-
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${monthNames[d.getMonth()]} ${d.getDate()}, ${timeStr}`;
+  return `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${timeStr}`;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -639,7 +611,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const stayOnTop = localStorage.getItem(STAY_ON_TOP_KEY) === "true";
   invoke("set_stay_on_top_pref", { enabled: stayOnTop }).catch(() => {});
 
-  document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+  document.getElementById("darkmode-toggle").addEventListener("change", (e) => {
+    const theme = e.target.checked ? "dark" : "light";
+    localStorage.setItem(THEME_KEY, theme);
+    setTheme(theme);
+  });
 
   document.getElementById("refresh-btn").addEventListener("click", () => {
     fetchAndRender();
@@ -676,7 +652,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const raw = sparkline.getAttribute("data-points");
     if (!raw) return;
 
-    const pts = JSON.parse(raw);
+    let pts;
+    try {
+      pts = JSON.parse(raw);
+      if (!Array.isArray(pts)) return;
+    } catch {
+      return;
+    }
     if (pts.length < 2) return;
 
     const svg = sparkline.querySelector("svg");

@@ -24,7 +24,11 @@ pub static STAY_ON_TOP_DETACHED: AtomicBool = AtomicBool::new(false);
 static LAST_BLUR_HIDE_MS: AtomicU64 = AtomicU64::new(0);
 
 pub fn log(msg: &str) {
-    let log_path = std::env::temp_dir().join("claudit_debug.log");
+    let log_dir = dirs::data_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("com.claudit.monitor");
+    let _ = std::fs::create_dir_all(&log_dir);
+    let log_path = log_dir.join("debug.log");
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)

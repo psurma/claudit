@@ -79,45 +79,22 @@ pub async fn fetch_usage(token: &str) -> Result<UsageData, UsageError> {
 
     let mut limits = Vec::new();
 
-    if let Some(bucket) = &body.five_hour {
-        if let Some(util) = bucket.utilization {
-            limits.push(UsageLimit {
-                label: "Session (5hr rolling)".into(),
-                usage_pct: util / 100.0,
-                reset_at: bucket.resets_at.clone(),
-            });
+    fn push_bucket(limits: &mut Vec<UsageLimit>, bucket: &Option<UsageBucket>, label: &str) {
+        if let Some(b) = bucket {
+            if let Some(util) = b.utilization {
+                limits.push(UsageLimit {
+                    label: label.into(),
+                    usage_pct: util / 100.0,
+                    reset_at: b.resets_at.clone(),
+                });
+            }
         }
     }
 
-    if let Some(bucket) = &body.seven_day {
-        if let Some(util) = bucket.utilization {
-            limits.push(UsageLimit {
-                label: "Weekly All Models".into(),
-                usage_pct: util / 100.0,
-                reset_at: bucket.resets_at.clone(),
-            });
-        }
-    }
-
-    if let Some(bucket) = &body.seven_day_sonnet {
-        if let Some(util) = bucket.utilization {
-            limits.push(UsageLimit {
-                label: "Weekly Sonnet".into(),
-                usage_pct: util / 100.0,
-                reset_at: bucket.resets_at.clone(),
-            });
-        }
-    }
-
-    if let Some(bucket) = &body.seven_day_opus {
-        if let Some(util) = bucket.utilization {
-            limits.push(UsageLimit {
-                label: "Weekly Opus".into(),
-                usage_pct: util / 100.0,
-                reset_at: bucket.resets_at.clone(),
-            });
-        }
-    }
+    push_bucket(&mut limits, &body.five_hour, "Session (5hr rolling)");
+    push_bucket(&mut limits, &body.seven_day, "Weekly All Models");
+    push_bucket(&mut limits, &body.seven_day_sonnet, "Weekly Sonnet");
+    push_bucket(&mut limits, &body.seven_day_opus, "Weekly Opus");
 
     let extra_usage = body.extra_usage.and_then(|eu| {
         if eu.is_enabled.unwrap_or(false) {
