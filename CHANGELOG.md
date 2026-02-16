@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.6 (2026-02-16)
+
+### Added
+- Tray icon toggle: clicking the tray icon when the panel is already open now closes it (docked mode only)
+- Login button shown in usage error state when token is expired/unauthorized
+- Clicking "Open claude to login" launches Terminal with `claude` CLI to trigger OAuth flow
+- Cross-platform terminal launch: macOS (Terminal.app via osascript), Windows (cmd), Linux (gnome-terminal/konsole/xfce4-terminal/xterm)
+
+### Fixed
+- When detached, clicking tray icon still focuses the window (no toggle) as expected
+
 ## 0.6.5 (2026-02-12)
 
 ### Added

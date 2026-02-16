@@ -223,6 +223,53 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
     })
 }
 
+#[tauri::command]
+pub async fn open_login() -> Result<(), String> {
+    log("open_login: launching claude CLI");
+    #[cfg(target_os = "macos")]
+    {
+        tokio::process::Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"Terminal\" to do script \"claude\"")
+            .output()
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        tokio::process::Command::new("cmd")
+            .args(["/c", "start", "cmd", "/k", "claude"])
+            .output()
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // Try common terminal emulators in order
+        let terminals = [
+            ("gnome-terminal", vec!["--", "claude"]),
+            ("konsole", vec!["-e", "claude"]),
+            ("xfce4-terminal", vec!["-e", "claude"]),
+            ("xterm", vec!["-e", "claude"]),
+        ];
+        let mut launched = false;
+        for (term, args) in &terminals {
+            if tokio::process::Command::new(term)
+                .args(args)
+                .spawn()
+                .is_ok()
+            {
+                launched = true;
+                break;
+            }
+        }
+        if !launched {
+            return Err("No supported terminal emulator found".to_string());
+        }
+    }
+    Ok(())
+}
+
 fn parse_version(v: &str) -> Option<Vec<u64>> {
     v.split('.')
         .map(|part| part.parse::<u64>().ok())

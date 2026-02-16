@@ -305,6 +305,16 @@ function renderUsage(data) {
   if (data.usage_error) {
     errorEl.style.display = "block";
     errorEl.textContent = data.usage_error;
+    if (data.usage_error.toLowerCase().includes("unauthorized") || data.usage_error.toLowerCase().includes("session")) {
+      const loginBtn = document.createElement("button");
+      loginBtn.className = "login-btn";
+      loginBtn.textContent = "Open claude to login";
+      loginBtn.addEventListener("click", () => {
+        invoke("open_login").catch((e) => console.error("open_login failed:", e));
+      });
+      errorEl.appendChild(document.createElement("br"));
+      errorEl.appendChild(loginBtn);
+    }
     limitsEl.innerHTML = "";
     return;
   }

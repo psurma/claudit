@@ -5,7 +5,7 @@ mod keychain;
 mod usage_api;
 
 use std::io::Write;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -19,6 +19,9 @@ const PANEL_HEIGHT: f64 = 620.0;
 pub static PANEL_VISIBLE: AtomicBool = AtomicBool::new(false);
 pub static PANEL_DETACHED: AtomicBool = AtomicBool::new(false);
 pub static STAY_ON_TOP_DETACHED: AtomicBool = AtomicBool::new(false);
+/// Timestamp (ms since UNIX epoch) when the panel was last hidden by blur.
+/// Used to suppress re-showing when the tray click caused the blur.
+static LAST_BLUR_HIDE_MS: AtomicU64 = AtomicU64::new(0);
 
 pub fn log(msg: &str) {
     let log_path = std::env::temp_dir().join("claudit_debug.log");
@@ -107,6 +110,7 @@ pub fn run() {
             commands::get_autostart_enabled,
             commands::set_autostart_enabled,
             commands::check_for_updates,
+            commands::open_login,
         ])
         .setup(|app| {
             log("Setup starting");
@@ -159,7 +163,28 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, position, .. } = event {
-                        show_panel(tray.app_handle(), Some(position));
+                        // Check if blur just hid the panel (the tray click itself caused focus loss).
+                        // If so, treat this as a toggle-close: don't re-show.
+                        let now_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        let blur_ms = LAST_BLUR_HIDE_MS.load(Ordering::SeqCst);
+                        if blur_ms > 0 && now_ms.saturating_sub(blur_ms) < 500 {
+                            log("Tray click: suppressed (panel just hidden by blur)");
+                            LAST_BLUR_HIDE_MS.store(0, Ordering::SeqCst);
+                            return;
+                        }
+
+                        if PANEL_VISIBLE.load(Ordering::SeqCst) && !PANEL_DETACHED.load(Ordering::SeqCst) {
+                            log("Tray click: hiding docked panel (toggle)");
+                            PANEL_VISIBLE.store(false, Ordering::SeqCst);
+                            if let Some(w) = tray.app_handle().get_webview_window(PANEL_LABEL) {
+                                let _ = w.hide();
+                            }
+                        } else {
+                            show_panel(tray.app_handle(), Some(position));
+                        }
                     }
                 })
                 .on_menu_event(|app, event| {
@@ -191,6 +216,11 @@ pub fn run() {
                     if PANEL_VISIBLE.load(Ordering::SeqCst) {
                         PANEL_VISIBLE.store(false, Ordering::SeqCst);
                         let _ = window.hide();
+                        let now_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        LAST_BLUR_HIDE_MS.store(now_ms, Ordering::SeqCst);
                         log("Panel hidden on blur");
                     }
                 }
