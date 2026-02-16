@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.7 (2026-02-16)
+
+### Fixed
+- Download link in update checker now opens the GitHub release page in the system browser
+- Previously the link did nothing because Tauri's webview doesn't handle `target="_blank"` links
+- Added cross-platform `open_url` command (macOS `open`, Windows `start`, Linux `xdg-open`)
+
 ## 0.6.6 (2026-02-16)
 
 ### Added

@@ -270,6 +270,36 @@ pub async fn open_login() -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub async fn open_url(url: String) -> Result<(), String> {
+    log(&format!("open_url: {}", url));
+    #[cfg(target_os = "macos")]
+    {
+        tokio::process::Command::new("open")
+            .arg(&url)
+            .output()
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        tokio::process::Command::new("cmd")
+            .args(["/c", "start", &url])
+            .output()
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        tokio::process::Command::new("xdg-open")
+            .arg(&url)
+            .output()
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn parse_version(v: &str) -> Option<Vec<u64>> {
     v.split('.')
         .map(|part| part.parse::<u64>().ok())

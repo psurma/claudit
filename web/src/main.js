@@ -523,8 +523,11 @@ async function checkForUpdates() {
     document.getElementById("version-label").textContent = "v" + info.current_version;
     if (info.update_available) {
       statusEl.innerHTML =
-        'v' + escapeHtml(info.latest_version) + ' available - <a href="' +
-        escapeHtml(info.release_url) + '" target="_blank">Download</a>';
+        'v' + escapeHtml(info.latest_version) + ' available - <a href="#" class="download-link">Download</a>';
+      statusEl.querySelector(".download-link").addEventListener("click", (e) => {
+        e.preventDefault();
+        invoke("open_url", { url: info.release_url }).catch((err) => console.error("open_url failed:", err));
+      });
     } else if (info.latest_version === "unknown") {
       statusEl.textContent = "No releases found";
     } else {

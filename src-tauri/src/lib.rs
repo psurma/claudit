@@ -111,6 +111,7 @@ pub fn run() {
             commands::set_autostart_enabled,
             commands::check_for_updates,
             commands::open_login,
+            commands::open_url,
         ])
         .setup(|app| {
             log("Setup starting");
