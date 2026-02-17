@@ -571,7 +571,7 @@ function resetCountdown() {
 
 function startAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = setInterval(fetchAndRender, 60000);
+  refreshTimer = setInterval(() => fetchAndRender(true), 60000);
   resetCountdown();
 }
 
@@ -759,6 +759,6 @@ document.addEventListener("DOMContentLoaded", () => {
     startAutoRefresh();
   });
 
-  fetchAndRender();
+  fetchAndRender(true);
   startAutoRefresh();
 });

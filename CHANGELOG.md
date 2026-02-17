@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.10 (2026-02-17)
+
+### Fixed
+- Refresh spinner no longer shows on auto-refresh or initial load, only on manual click
+
 ## 0.6.9 (2026-02-17)
 
 ### Added
