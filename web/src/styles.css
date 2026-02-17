@@ -390,7 +390,9 @@ h2 {
   transform: rotate(-90deg);
 }
 
-#costs-content.collapsed {
+#costs-content.collapsed,
+#weekly-content.collapsed,
+#extra-content.collapsed {
   display: none;
 }
 

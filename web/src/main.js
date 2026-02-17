@@ -11,6 +11,8 @@ const SESSION_MAX_AGE = 18000; // 5 hours
 const WEEKLY_MAX_AGE = 604800; // 7 days in seconds
 const THEME_KEY = "claudit-theme";
 const COSTS_COLLAPSED_KEY = "claudit-costs-collapsed";
+const WEEKLY_COLLAPSED_KEY = "claudit-weekly-collapsed";
+const EXTRA_COLLAPSED_KEY = "claudit-extra-collapsed";
 const STAY_ON_TOP_KEY = "claudit-stay-on-top";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -283,7 +285,6 @@ function navigateSparkline(label, direction) {
 function renderUsage(data) {
   const loading = document.getElementById("usage-loading");
   const errorEl = document.getElementById("usage-error");
-  const limitsEl = document.getElementById("usage-limits");
 
   loading.style.display = "none";
 
@@ -300,65 +301,81 @@ function renderUsage(data) {
       errorEl.appendChild(document.createElement("br"));
       errorEl.appendChild(loginBtn);
     }
-    limitsEl.innerHTML = "";
+    document.getElementById("session-limits").innerHTML = "";
+    document.getElementById("weekly-section").style.display = "none";
+    document.getElementById("extra-section").style.display = "none";
     return;
   }
 
   errorEl.style.display = "none";
 
+  const sessionEl = document.getElementById("session-limits");
+  const weeklySection = document.getElementById("weekly-section");
+  const weeklyEl = document.getElementById("weekly-limits");
+
   if (!data.usage || !data.usage.limits || data.usage.limits.length === 0) {
-    limitsEl.innerHTML = '<div class="loading">No usage limits found</div>';
+    sessionEl.innerHTML = '<div class="loading">No usage limits found</div>';
+    weeklySection.style.display = "none";
     return;
   }
 
   const history = data.usage_history;
+  const sessionLimits = data.usage.limits.filter((l) => isSessionLimit(l.label));
+  const weeklyLimits = data.usage.limits.filter((l) => !isSessionLimit(l.label));
 
-  limitsEl.innerHTML = data.usage.limits
-    .map((limit) => {
-      const pct = Math.min(100, Math.round(limit.usage_pct * 100));
-      const colorClass = getColorClass(pct);
-      const resetText = limit.reset_at ? formatReset(limit.reset_at) : "";
+  function renderLimitItem(limit) {
+    const pct = Math.min(100, Math.round(limit.usage_pct * 100));
+    const colorClass = getColorClass(pct);
+    const resetText = limit.reset_at ? formatReset(limit.reset_at) : "";
+    const historyPoints = getHistoryForLabel(history, limit.label);
+    const color = getColorForPct(pct);
 
-      const historyPoints = getHistoryForLabel(history, limit.label);
-      const color = getColorForPct(pct);
+    let sparkline;
+    if (isSessionLimit(limit.label)) {
+      const resetAt = limit.reset_at ? Math.floor(new Date(limit.reset_at).getTime() / 1000) : Math.floor(Date.now() / 1000);
+      sparklineData[limit.label] = { dataPoints: historyPoints, color, resetAt };
+      sparkline = renderNavigableSparkline(limit.label, historyPoints, color, resetAt);
+    } else {
+      const maxAge = getMaxAgeForLabel(limit.label);
+      sparkline = renderSparkline(historyPoints, maxAge, color);
+    }
 
-      let sparkline;
-      if (isSessionLimit(limit.label)) {
-        const resetAt = limit.reset_at ? Math.floor(new Date(limit.reset_at).getTime() / 1000) : Math.floor(Date.now() / 1000);
-        sparklineData[limit.label] = { dataPoints: historyPoints, color, resetAt };
-        sparkline = renderNavigableSparkline(limit.label, historyPoints, color, resetAt);
-      } else {
-        const maxAge = getMaxAgeForLabel(limit.label);
-        sparkline = renderSparkline(historyPoints, maxAge, color);
-      }
-
-      return `
-        <div class="limit-item">
-          <div class="limit-header">
-            <span class="limit-label">${escapeHtml(limit.label)}</span>
-            <span class="limit-pct" style="color: var(--${colorClass})">${pct}%</span>
-          </div>
-          <div class="progress-track">
-            <div class="progress-fill ${colorClass}" style="width: ${pct}%"></div>
-          </div>
-          ${resetText ? `<div class="limit-reset">Resets ${resetText}</div>` : ""}
-          ${sparkline}
+    return `
+      <div class="limit-item">
+        <div class="limit-header">
+          <span class="limit-label">${escapeHtml(limit.label)}</span>
+          <span class="limit-pct" style="color: var(--${colorClass})">${pct}%</span>
         </div>
-      `;
-    })
-    .join("");
+        <div class="progress-track">
+          <div class="progress-fill ${colorClass}" style="width: ${pct}%"></div>
+        </div>
+        ${resetText ? `<div class="limit-reset">Resets ${resetText}</div>` : ""}
+        ${sparkline}
+      </div>
+    `;
+  }
+
+  sessionEl.innerHTML = sessionLimits.map(renderLimitItem).join("");
+
+  if (weeklyLimits.length > 0) {
+    weeklySection.style.display = "block";
+    weeklyEl.innerHTML = weeklyLimits.map(renderLimitItem).join("");
+  } else {
+    weeklySection.style.display = "none";
+  }
 
   // Render extra usage (overages) if present
+  const extraSection = document.getElementById("extra-section");
   const extraEl = document.getElementById("extra-usage");
   if (data.usage.extra_usage) {
     const eu = data.usage.extra_usage;
     const pct = Math.min(100, Math.round(eu.utilization * 100));
     const colorClass = getColorClass(pct);
-    extraEl.style.display = "block";
+    extraSection.style.display = "block";
     extraEl.innerHTML = `
       <div class="limit-item">
         <div class="limit-header">
-          <span class="limit-label">Extra Usage</span>
+          <span class="limit-label">Spend</span>
           <span class="limit-pct" style="color: var(--${colorClass})">${pct}% (&pound;${eu.used_credits.toFixed(2)})</span>
         </div>
         <div class="progress-track">
@@ -367,7 +384,7 @@ function renderUsage(data) {
       </div>
     `;
   } else {
-    extraEl.style.display = "none";
+    extraSection.style.display = "none";
   }
 }
 
@@ -520,28 +537,23 @@ async function checkForUpdates() {
 
 // --- Costs collapse ---
 
-function initCostsCollapse() {
-  const collapsed = localStorage.getItem(COSTS_COLLAPSED_KEY) === "true";
-  setCostsCollapsed(collapsed);
+function setCollapsed(contentId, headerId, storageKey, collapsed) {
+  const content = document.getElementById(contentId);
+  const chevron = document.querySelector("#" + headerId + " .chevron");
+  if (!content || !chevron) return;
+  content.classList.toggle("collapsed", collapsed);
+  chevron.classList.toggle("collapsed", collapsed);
+  localStorage.setItem(storageKey, collapsed ? "true" : "false");
 }
 
-function toggleCostsCollapsed() {
-  const content = document.getElementById("costs-content");
-  const isCollapsed = content.classList.contains("collapsed");
-  setCostsCollapsed(!isCollapsed);
-}
-
-function setCostsCollapsed(collapsed) {
-  const content = document.getElementById("costs-content");
-  const chevron = document.querySelector("#costs-header .chevron");
-  if (collapsed) {
-    content.classList.add("collapsed");
-    chevron.classList.add("collapsed");
-  } else {
-    content.classList.remove("collapsed");
-    chevron.classList.remove("collapsed");
-  }
-  localStorage.setItem(COSTS_COLLAPSED_KEY, collapsed ? "true" : "false");
+function initCollapsible(contentId, headerId, storageKey) {
+  const collapsed = localStorage.getItem(storageKey) === "true";
+  setCollapsed(contentId, headerId, storageKey, collapsed);
+  document.getElementById(headerId).addEventListener("click", () => {
+    const content = document.getElementById(contentId);
+    const isCollapsed = content.classList.contains("collapsed");
+    setCollapsed(contentId, headerId, storageKey, !isCollapsed);
+  });
 }
 
 function resetCountdown() {
@@ -600,7 +612,9 @@ function formatTooltipTime(ts) {
 
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
-  initCostsCollapse();
+  initCollapsible("weekly-content", "weekly-header", WEEKLY_COLLAPSED_KEY);
+  initCollapsible("extra-content", "extra-header", EXTRA_COLLAPSED_KEY);
+  initCollapsible("costs-content", "costs-header", COSTS_COLLAPSED_KEY);
 
   // Shared sparkline tooltip
   const tooltip = document.createElement("div");
@@ -629,10 +643,8 @@ document.addEventListener("DOMContentLoaded", () => {
     e.preventDefault();
     checkForUpdates();
   });
-  document.getElementById("costs-header").addEventListener("click", toggleCostsCollapsed);
-
   // Sparkline navigation: delegated click handlers
-  document.getElementById("usage-limits").addEventListener("click", (e) => {
+  document.getElementById("usage-section").addEventListener("click", (e) => {
     const btn = e.target.closest(".sparkline-prev, .sparkline-next");
     if (!btn || btn.disabled) return;
     const nav = btn.closest(".sparkline-nav");
@@ -643,7 +655,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Sparkline tooltip on hover
-  document.getElementById("usage-limits").addEventListener("mousemove", (e) => {
+  document.getElementById("usage-section").addEventListener("mousemove", (e) => {
     const sparkline = e.target.closest(".sparkline");
     if (!sparkline) {
       tooltip.style.display = "none";
@@ -696,13 +708,13 @@ document.addEventListener("DOMContentLoaded", () => {
     tooltip.style.top = top + "px";
   });
 
-  document.getElementById("usage-limits").addEventListener("mouseleave", () => {
+  document.getElementById("usage-section").addEventListener("mouseleave", () => {
     tooltip.style.display = "none";
   });
 
   // Trackpad swipe navigation for sparklines
   let swipeAccum = 0;
-  document.getElementById("usage-limits").addEventListener("wheel", (e) => {
+  document.getElementById("usage-section").addEventListener("wheel", (e) => {
     const nav = e.target.closest(".sparkline-nav");
     if (!nav) return;
     if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;

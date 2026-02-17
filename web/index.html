@@ -62,7 +62,7 @@
           </label>
         </div>
         <div class="pref-row update-row">
-          <span class="pref-label" id="version-label">v0.6.8</span>
+          <span class="pref-label" id="version-label">v0.6.9</span>
           <span id="update-status">
             <a href="#" id="check-updates-link">Check for updates</a>
           </span>
@@ -72,8 +72,29 @@
       <section id="usage-section">
         <div id="usage-loading" class="loading">Loading usage data...</div>
         <div id="usage-error" class="error" style="display:none"></div>
-        <div id="usage-limits"></div>
-        <div id="extra-usage" style="display:none"></div>
+        <div id="session-limits"></div>
+        <div id="weekly-section" style="display:none">
+          <h2 class="section-header" id="weekly-header">
+            <span>Weekly Limits</span>
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </h2>
+          <div id="weekly-content">
+            <div id="weekly-limits"></div>
+          </div>
+        </div>
+        <div id="extra-section" style="display:none">
+          <h2 class="section-header" id="extra-header">
+            <span>Extra Usage</span>
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </h2>
+          <div id="extra-content">
+            <div id="extra-usage"></div>
+          </div>
+        </div>
       </section>
 
       <div class="divider"></div>

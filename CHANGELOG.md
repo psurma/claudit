@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.9 (2026-02-17)
+
+### Added
+- Collapsible "Weekly Limits" section with chevron toggle (collapsed state persisted)
+- Collapsible "Extra Usage" section with chevron toggle (collapsed state persisted)
+- Session (5hr) limit always visible; weekly and extra usage can be collapsed to reduce panel size
+- Generic collapsible section mechanism replaces the costs-only implementation
+
+### Changed
+- Costs, weekly, and extra sections all use the same `initCollapsible()` pattern (DRY)
+
 ## 0.6.8 (2026-02-16)
 
 ### Changed
