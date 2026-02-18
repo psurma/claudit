@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.11 (2026-02-18)
+
+### Fixed
+- Usage labels now match Claude Code CLI exactly: "Current session", "Current week (all models)", "Current week (Sonnet only)"
+- Percentage display uses Math.floor (not Math.round) to match CLI behavior, fixing 1% discrepancy
+- Old sparkline history data auto-migrated to new label names
+
 ## 0.6.10 (2026-02-17)
 
 ### Fixed

@@ -135,7 +135,7 @@ function renderSparkline(dataPoints, maxAgeSeconds, color) {
 
 
 function getMaxAgeForLabel(label) {
-  if (label.toLowerCase().includes("session") || label.toLowerCase().includes("5hr")) {
+  if (label.toLowerCase().includes("session")) {
     return SESSION_MAX_AGE;
   }
   return WEEKLY_MAX_AGE;
@@ -143,7 +143,7 @@ function getMaxAgeForLabel(label) {
 
 function isSessionLimit(label) {
   const lower = label.toLowerCase();
-  return lower.includes("session") || lower.includes("5hr");
+  return lower.includes("session");
 }
 
 function getWindowBounds(offset, resetAt) {
@@ -324,7 +324,7 @@ function renderUsage(data) {
   const weeklyLimits = data.usage.limits.filter((l) => !isSessionLimit(l.label));
 
   function renderLimitItem(limit) {
-    const pct = Math.min(100, Math.round(limit.usage_pct * 100));
+    const pct = Math.min(100, Math.floor(limit.usage_pct * 100));
     const colorClass = getColorClass(pct);
     const resetText = limit.reset_at ? formatReset(limit.reset_at) : "";
     const historyPoints = getHistoryForLabel(history, limit.label);
@@ -369,7 +369,7 @@ function renderUsage(data) {
   const extraEl = document.getElementById("extra-usage");
   if (data.usage.extra_usage) {
     const eu = data.usage.extra_usage;
-    const pct = Math.min(100, Math.round(eu.utilization * 100));
+    const pct = Math.min(100, Math.floor(eu.utilization * 100));
     const colorClass = getColorClass(pct);
     extraSection.style.display = "block";
     extraEl.innerHTML = `
@@ -694,7 +694,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    const pct = Math.round(Math.min(1, Math.max(0, closest.v)) * 100);
+    const pct = Math.floor(Math.min(1, Math.max(0, closest.v)) * 100);
     tooltip.textContent = `${formatTooltipTime(closest.t)} \u2014 ${pct}%`;
     tooltip.style.display = "block";
 

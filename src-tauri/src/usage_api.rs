@@ -91,10 +91,10 @@ pub async fn fetch_usage(token: &str) -> Result<UsageData, UsageError> {
         }
     }
 
-    push_bucket(&mut limits, &body.five_hour, "Session (5hr rolling)");
-    push_bucket(&mut limits, &body.seven_day, "Weekly All Models");
-    push_bucket(&mut limits, &body.seven_day_sonnet, "Weekly Sonnet");
-    push_bucket(&mut limits, &body.seven_day_opus, "Weekly Opus");
+    push_bucket(&mut limits, &body.five_hour, "Current session");
+    push_bucket(&mut limits, &body.seven_day, "Current week (all models)");
+    push_bucket(&mut limits, &body.seven_day_sonnet, "Current week (Sonnet only)");
+    push_bucket(&mut limits, &body.seven_day_opus, "Current week (Opus only)");
 
     let extra_usage = body.extra_usage.and_then(|eu| {
         if eu.is_enabled.unwrap_or(false) {

@@ -34,6 +34,23 @@ fn get_history_path(app: &tauri::AppHandle) -> Option<PathBuf> {
     }
 }
 
+const LABEL_MIGRATIONS: &[(&str, &str)] = &[
+    ("Session (5hr rolling)", "Current session"),
+    ("Weekly All Models", "Current week (all models)"),
+    ("Weekly Sonnet", "Current week (Sonnet only)"),
+    ("Weekly Opus", "Current week (Opus only)"),
+];
+
+fn migrate_labels(history: &mut UsageHistory) {
+    for snapshot in &mut history.snapshots {
+        for &(old, new) in LABEL_MIGRATIONS {
+            if let Some(val) = snapshot.buckets.remove(old) {
+                snapshot.buckets.insert(new.to_string(), val);
+            }
+        }
+    }
+}
+
 pub fn load_history(app: &tauri::AppHandle) -> UsageHistory {
     let path = match get_history_path(app) {
         Some(p) => p,
@@ -41,10 +58,14 @@ pub fn load_history(app: &tauri::AppHandle) -> UsageHistory {
     };
 
     match fs::read_to_string(&path) {
-        Ok(contents) => serde_json::from_str(&contents).unwrap_or_else(|e| {
-            log(&format!("history: parse error: {}", e));
-            UsageHistory { snapshots: vec![] }
-        }),
+        Ok(contents) => {
+            let mut history: UsageHistory = serde_json::from_str(&contents).unwrap_or_else(|e| {
+                log(&format!("history: parse error: {}", e));
+                UsageHistory { snapshots: vec![] }
+            });
+            migrate_labels(&mut history);
+            history
+        }
         Err(_) => UsageHistory { snapshots: vec![] },
     }
 }
