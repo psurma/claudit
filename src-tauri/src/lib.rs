@@ -119,7 +119,8 @@ pub fn run() {
         .manage(ccusage::CostCache::new())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .invoke_handler(tauri::generate_handler![
-            commands::get_all_data,
+            commands::get_usage_data,
+            commands::get_costs_data,
             commands::hide_panel,
             commands::detach_panel,
             commands::attach_panel,

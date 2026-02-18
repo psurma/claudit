@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.13 (2026-02-18)
+
+### Fixed
+- Usage data now renders in ~1 second instead of waiting 16+ seconds for costs to load
+- Split `get_all_data` into separate `get_usage_data` and `get_costs_data` commands
+- Usage and costs fetch concurrently but render independently as each completes
+- Costs section shows "Loading costs..." while ccusage runs in the background
+
 ## 0.6.12 (2026-02-18)
 
 ### Security

@@ -7,6 +7,10 @@ let countdownTimer = null;
 let countdown = 60;
 let isDetached = false;
 
+// Cache last successful responses for instant panel rendering
+let lastUsageData = null;
+let lastCostsData = null;
+
 const SESSION_MAX_AGE = 18000; // 5 hours
 const WEEKLY_MAX_AGE = 604800; // 7 days in seconds
 const THEME_KEY = "claudit-theme";
@@ -70,17 +74,40 @@ async function fetchAndRender(silent = false) {
   const btn = document.getElementById("refresh-btn");
   if (!silent) btn.classList.add("spinning");
 
-  try {
-    const data = await invoke("get_all_data");
-    renderUsage(data);
-    renderCosts(data);
-    document.getElementById("timestamp").textContent = "Updated " + data.timestamp;
-  } catch (e) {
-    console.error("Failed to fetch data:", e);
-  } finally {
-    if (!silent) btn.classList.remove("spinning");
-    resetCountdown();
+  // Show cached data instantly so panel never feels empty
+  if (lastUsageData) {
+    renderUsage(lastUsageData);
+    document.getElementById("timestamp").textContent = "Updated " + lastUsageData.timestamp;
   }
+  if (lastCostsData) {
+    renderCosts(lastCostsData);
+  }
+
+  // Fire both requests concurrently; render each section as it arrives
+  const usagePromise = invoke("get_usage_data");
+  const costsPromise = invoke("get_costs_data");
+
+  // Usage renders first (~1s) without waiting for costs
+  try {
+    const usageData = await usagePromise;
+    lastUsageData = usageData;
+    renderUsage(usageData);
+    document.getElementById("timestamp").textContent = "Updated " + usageData.timestamp;
+  } catch (e) {
+    console.error("Failed to fetch usage:", e);
+  }
+
+  // Costs render when ready
+  try {
+    const costsData = await costsPromise;
+    lastCostsData = costsData;
+    renderCosts(costsData);
+  } catch (e) {
+    console.error("Failed to fetch costs:", e);
+  }
+
+  if (!silent) btn.classList.remove("spinning");
+  resetCountdown();
 }
 
 function getHistoryForLabel(history, label) {
