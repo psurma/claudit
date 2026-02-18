@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Default permissions for Claudit",
-  "windows": ["*"],
+  "windows": ["panel"],
   "permissions": [
     "core:default",
     "core:window:default",

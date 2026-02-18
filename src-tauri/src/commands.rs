@@ -17,6 +17,22 @@ pub struct AppData {
     pub timestamp: String,
 }
 
+async fn fetch_with_timeout<T, E: std::fmt::Display>(
+    label: &str,
+    timeout_secs: u64,
+    future: impl std::future::Future<Output = Result<T, E>>,
+) -> (Option<T>, Option<String>) {
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(timeout_secs),
+        future,
+    ).await;
+    match result {
+        Ok(Ok(data)) => { log(&format!("get_all_data: {} OK", label)); (Some(data), None) }
+        Ok(Err(e)) => { log(&format!("get_all_data: {} error: {}", label, e)); (None, Some(e.to_string())) }
+        Err(_) => { log(&format!("get_all_data: {} timeout", label)); (None, Some("Request timed out".to_string())) }
+    }
+}
+
 #[tauri::command]
 pub async fn get_all_data(app: tauri::AppHandle, cost_cache: State<'_, CostCache>) -> Result<AppData, ()> {
     log("get_all_data: starting");
@@ -34,15 +50,7 @@ pub async fn get_all_data(app: tauri::AppHandle, cost_cache: State<'_, CostCache
         match token_result {
             Ok(ref token) => {
                 log("get_all_data: fetching usage API");
-                let result = tokio::time::timeout(
-                    std::time::Duration::from_secs(10),
-                    usage_api::fetch_usage(token),
-                ).await;
-                match result {
-                    Ok(Ok(data)) => { log("get_all_data: usage OK"); (Some(data), None) }
-                    Ok(Err(e)) => { log(&format!("get_all_data: usage error: {}", e)); (None, Some(e.to_string())) }
-                    Err(_) => { log("get_all_data: usage timeout"); (None, Some("Request timed out".to_string())) }
-                }
+                fetch_with_timeout("usage", 10, usage_api::fetch_usage(token)).await
             }
             Err(ref e) => (None, Some(e.clone())),
         }
@@ -51,36 +59,20 @@ pub async fn get_all_data(app: tauri::AppHandle, cost_cache: State<'_, CostCache
     let cost_cache_ref = cost_cache.inner().clone();
     let costs_future = async move {
         log("get_all_data: fetching costs");
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(45),
-            ccusage::fetch_costs(&cost_cache_ref),
-        ).await;
-        match result {
-            Ok(Ok(data)) => { log("get_all_data: costs OK"); (Some(data), None) }
-            Ok(Err(e)) => { log(&format!("get_all_data: costs error: {}", e)); (None, Some(e.to_string())) }
-            Err(_) => { log("get_all_data: costs timeout"); (None, Some("Request timed out".to_string())) }
-        }
+        fetch_with_timeout("costs", 45, ccusage::fetch_costs(&cost_cache_ref)).await
     };
 
     let ((usage, usage_error), (costs, costs_error)) = tokio::join!(usage_future, costs_future);
 
-    // Save snapshot and load history if usage was fetched successfully
-    let usage_history = if let Some(ref usage_data) = usage {
+    // Save snapshot (if usage succeeded) and load history in one blocking call
+    let usage_history = {
         let app_clone = app.clone();
-        let usage_clone = usage_data.clone();
+        let usage_for_save = usage.clone();
         tokio::task::spawn_blocking(move || {
-            history::save_snapshot(&app_clone, &usage_clone);
-            let h = history::load_history(&app_clone);
-            h.snapshots
-        })
-        .await
-        .ok()
-    } else {
-        // Still load history even if this fetch failed
-        let app_clone = app.clone();
-        tokio::task::spawn_blocking(move || {
-            let h = history::load_history(&app_clone);
-            h.snapshots
+            if let Some(ref data) = usage_for_save {
+                history::save_snapshot(&app_clone, data);
+            }
+            history::load_history(&app_clone).snapshots
         })
         .await
         .ok()
@@ -144,11 +136,6 @@ pub fn set_stay_on_top_pref(enabled: bool) -> Result<(), ()> {
     log(&format!("set_stay_on_top_pref: {}", enabled));
     crate::STAY_ON_TOP_DETACHED.store(enabled, Ordering::SeqCst);
     Ok(())
-}
-
-#[tauri::command]
-pub fn get_stay_on_top_pref() -> Result<bool, ()> {
-    Ok(crate::STAY_ON_TOP_DETACHED.load(Ordering::SeqCst))
 }
 
 #[tauri::command]
@@ -272,8 +259,18 @@ pub async fn open_login() -> Result<(), String> {
 
 #[tauri::command]
 pub async fn open_url(url: String) -> Result<(), String> {
+    // Validate scheme
     if !url.starts_with("https://") && !url.starts_with("http://") {
         return Err("Only HTTP/HTTPS URLs are allowed".to_string());
+    }
+    // Validate URL has a host after the scheme
+    let after_scheme = if url.starts_with("https://") { &url[8..] } else { &url[7..] };
+    if after_scheme.is_empty() || after_scheme.starts_with('/') {
+        return Err("Invalid URL: missing host".to_string());
+    }
+    // Block shell metacharacters (defense-in-depth; Command::new doesn't use shell)
+    if url.contains(&['`', '|', ';', '&', '$', '(', ')', '{', '}', '<', '>', '\n', '\r'][..]) {
+        return Err("URL contains invalid characters".to_string());
     }
     log(&format!("open_url: {}", url));
     #[cfg(target_os = "macos")]

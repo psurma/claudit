@@ -16,6 +16,12 @@ const EXTRA_COLLAPSED_KEY = "claudit-extra-collapsed";
 const STAY_ON_TOP_KEY = "claudit-stay-on-top";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+const SPARK_WIDTH = 318;
+const SPARK_HEIGHT = 36;
+const SPARK_PAD_TOP = 2;
+const SPARK_PAD_BOTTOM = 2;
 
 const sparklineData = {};
 const sparklineOffsets = {};
@@ -84,43 +90,48 @@ function getHistoryForLabel(history, label) {
     .map((s) => ({ timestamp: s.timestamp, value: s.buckets[label] }));
 }
 
-function renderSparkline(dataPoints, maxAgeSeconds, color) {
-  if (!dataPoints || dataPoints.length < 2) return "";
+function buildSparklineSVG(filtered, timeStart, timeEnd, color, options = {}) {
+  const { showPrediction, windowEnd } = options;
+  const chartHeight = SPARK_HEIGHT - SPARK_PAD_TOP - SPARK_PAD_BOTTOM;
+  const timeRange = timeEnd - timeStart || 1;
 
-  const now = Math.floor(Date.now() / 1000);
-  const cutoff = now - maxAgeSeconds;
-  const filtered = dataPoints.filter((p) => p.timestamp >= cutoff);
+  if (filtered.length < 2) {
+    return `<div class="sparkline">
+      <svg width="${SPARK_WIDTH}" height="${SPARK_HEIGHT}" viewBox="0 0 ${SPARK_WIDTH} ${SPARK_HEIGHT}" preserveAspectRatio="none">
+        <text x="${SPARK_WIDTH / 2}" y="${SPARK_HEIGHT / 2 + 4}" text-anchor="middle" fill="var(--text-dim)" font-size="11" font-family="-apple-system, sans-serif">No data</text>
+      </svg>
+    </div>`;
+  }
 
-  if (filtered.length < 2) return "";
-
-  const width = 318;
-  const height = 36;
-  const padTop = 2;
-  const padBottom = 2;
-  const chartHeight = height - padTop - padBottom;
-
-  const minTime = filtered[0].timestamp;
-  const maxTime = filtered[filtered.length - 1].timestamp;
-  const timeRange = maxTime - minTime || 1;
-
-  // Values are 0-1 (percentage as decimal), clamp to 0-1
   const points = filtered.map((p) => ({
-    x: ((p.timestamp - minTime) / timeRange) * width,
-    y: padTop + chartHeight - Math.min(1, Math.max(0, p.value)) * chartHeight,
+    x: ((p.timestamp - timeStart) / timeRange) * SPARK_WIDTH,
+    y: SPARK_PAD_TOP + chartHeight - Math.min(1, Math.max(0, p.value)) * chartHeight,
   }));
 
   const linePoints = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
   const areaPoints =
-    `0,${height} ` +
-    `${points[0].x.toFixed(1)},${points[0].y.toFixed(1)} ` +
+    `${points[0].x.toFixed(1)},${SPARK_HEIGHT} ` +
     linePoints +
-    ` ${points[points.length - 1].x.toFixed(1)},${height}`;
+    ` ${points[points.length - 1].x.toFixed(1)},${SPARK_HEIGHT}`;
 
   const gradId = "sg-" + Math.random().toString(36).slice(2, 8);
   const compactPoints = JSON.stringify(filtered.map((p) => ({ t: p.timestamp, v: p.value })));
 
+  let predictionLine = "";
+  if (showPrediction && windowEnd) {
+    const now = Math.floor(Date.now() / 1000);
+    if (now >= timeStart && now <= windowEnd) {
+      const prediction = computePrediction(filtered, windowEnd);
+      if (prediction) {
+        const lastPt = points[points.length - 1];
+        const predY = SPARK_PAD_TOP + chartHeight - prediction.predictedValue * chartHeight;
+        predictionLine = `<line x1="${lastPt.x.toFixed(1)}" y1="${lastPt.y.toFixed(1)}" x2="${SPARK_WIDTH}" y2="${predY.toFixed(1)}" stroke="${color}" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"/>`;
+      }
+    }
+  }
+
   return `<div class="sparkline" data-points='${compactPoints.replace(/'/g, "&#39;")}'>
-    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+    <svg width="${SPARK_WIDTH}" height="${SPARK_HEIGHT}" viewBox="0 0 ${SPARK_WIDTH} ${SPARK_HEIGHT}" preserveAspectRatio="none">
       <defs>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>
@@ -129,8 +140,18 @@ function renderSparkline(dataPoints, maxAgeSeconds, color) {
       </defs>
       <polygon points="${areaPoints}" fill="url(#${gradId})"/>
       <polyline points="${linePoints}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${predictionLine}
     </svg>
   </div>`;
+}
+
+function renderSparkline(dataPoints, maxAgeSeconds, color) {
+  if (!dataPoints || dataPoints.length < 2) return "";
+  const now = Math.floor(Date.now() / 1000);
+  const cutoff = now - maxAgeSeconds;
+  const filtered = dataPoints.filter((p) => p.timestamp >= cutoff);
+  if (filtered.length < 2) return "";
+  return buildSparklineSVG(filtered, filtered[0].timestamp, filtered[filtered.length - 1].timestamp, color);
 }
 
 
@@ -191,58 +212,7 @@ function computePrediction(filtered, windowEnd) {
 
 function renderWindowSparkline(dataPoints, start, end, color) {
   const filtered = dataPoints.filter((p) => p.timestamp >= start && p.timestamp <= end);
-
-  const width = 318;
-  const height = 36;
-
-  if (filtered.length < 2) {
-    return `<div class="sparkline">
-      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
-        <text x="${width / 2}" y="${height / 2 + 4}" text-anchor="middle" fill="var(--text-dim)" font-size="11" font-family="-apple-system, sans-serif">No data</text>
-      </svg>
-    </div>`;
-  }
-
-  const padTop = 2;
-  const padBottom = 2;
-  const chartHeight = height - padTop - padBottom;
-  const timeRange = end - start || 1;
-
-  const points = filtered.map((p) => ({
-    x: ((p.timestamp - start) / timeRange) * width,
-    y: padTop + chartHeight - Math.min(1, Math.max(0, p.value)) * chartHeight,
-  }));
-
-  const linePoints = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-  const areaPoints =
-    `${points[0].x.toFixed(1)},${height} ` +
-    linePoints +
-    ` ${points[points.length - 1].x.toFixed(1)},${height}`;
-
-  const gradId = "sg-" + Math.random().toString(36).slice(2, 8);
-  const compactPoints = JSON.stringify(filtered.map((p) => ({ t: p.timestamp, v: p.value })));
-
-  return `<div class="sparkline" data-points='${compactPoints.replace(/'/g, "&#39;")}'>
-    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>
-          <stop offset="100%" stop-color="${color}" stop-opacity="0.05"/>
-        </linearGradient>
-      </defs>
-      <polygon points="${areaPoints}" fill="url(#${gradId})"/>
-      <polyline points="${linePoints}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
-      ${(() => {
-        const now = Math.floor(Date.now() / 1000);
-        if (now < start || now > end) return "";
-        const prediction = computePrediction(filtered, end);
-        if (!prediction) return "";
-        const lastPt = points[points.length - 1];
-        const predY = padTop + chartHeight - prediction.predictedValue * chartHeight;
-        return `<line x1="${lastPt.x.toFixed(1)}" y1="${lastPt.y.toFixed(1)}" x2="${width}" y2="${predY.toFixed(1)}" stroke="${color}" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"/>`;
-      })()}
-    </svg>
-  </div>`;
+  return buildSparklineSVG(filtered, start, end, color, { showPrediction: true, windowEnd: end });
 }
 
 function renderNavigableSparkline(label, dataPoints, color, resetAt) {
@@ -437,8 +407,7 @@ function formatReset(isoString) {
     if (hours > 0) parts.push(`${hours}h`);
     parts.push(`${minutes}m`);
 
-    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const dayName = dayNames[reset.getDay()];
+    const dayName = DAY_NAMES[reset.getDay()];
     const date = reset.getDate();
     const suffix = getOrdinalSuffix(date);
     const month = MONTH_NAMES[reset.getMonth()];
@@ -456,9 +425,12 @@ function getOrdinalSuffix(n) {
 }
 
 function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // --- Preferences ---
@@ -757,6 +729,11 @@ document.addEventListener("DOMContentLoaded", () => {
   listen("panel-shown", () => {
     fetchAndRender(true);
     startAutoRefresh();
+  });
+
+  listen("panel-hidden", () => {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
   });
 
   fetchAndRender(true);

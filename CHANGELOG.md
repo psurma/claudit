@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.12 (2026-02-18)
+
+### Security
+- `open_url` now validates URL structure and blocks shell metacharacters (defense-in-depth)
+- Debug log file created with 0600 permissions (owner-only read/write)
+- History file uses atomic write (write to .tmp then rename) to prevent corruption
+- History file created with 0600 permissions
+- Capabilities scoped to `["panel"]` window instead of wildcard `["*"]`
+
+### Improved
+- Extracted shared `buildSparklineSVG()` function, eliminating duplicated sparkline rendering code
+- Extracted `fetch_with_timeout()` helper in Rust, removing duplicated timeout-match pattern
+- Merged duplicate history loading blocks into single `spawn_blocking` call
+- Removed dead code: `get_stay_on_top_pref` command (never called from frontend)
+- History file race condition fixed with Mutex protecting read-modify-write cycle
+- `escapeHtml()` now uses string replacement instead of DOM manipulation (faster)
+- Timers cleared when panel is hidden (saves network requests and battery)
+- Multiple `Local::now()` calls in ccusage consolidated to avoid midnight edge case
+- Blur suppression threshold extracted to named constant `BLUR_SUPPRESS_MS`
+- `DAY_NAMES` moved to module-scope constant (was recreated per `formatReset` call)
+- Sparkline dimension constants extracted (`SPARK_WIDTH`, `SPARK_HEIGHT`, etc.)
+
 ## 0.6.11 (2026-02-18)
 
 ### Fixed

@@ -67,11 +67,12 @@ pub async fn fetch_costs(cache: &CostCache) -> Result<CostData, CcusageError> {
         return Ok(cached);
     }
 
+    let today = Local::now().date_naive();
+
     // ccusage expects YYYYMMDD format
-    let since = Local::now()
-        .date_naive()
+    let since = today
         .checked_sub_days(chrono::Days::new(30))
-        .unwrap_or(Local::now().date_naive())
+        .unwrap_or(today)
         .format("%Y%m%d")
         .to_string();
 
@@ -95,11 +96,10 @@ pub async fn fetch_costs(cache: &CostCache) -> Result<CostData, CcusageError> {
     let parsed: CcusageOutput = serde_json::from_str(&stdout)
         .map_err(|e| CcusageError::ParseError(format!("{}: {}", e, &stdout[..stdout.len().min(200)])))?;
 
-    let today_str = Local::now().date_naive().format("%Y-%m-%d").to_string();
-    let week_ago = Local::now()
-        .date_naive()
+    let today_str = today.format("%Y-%m-%d").to_string();
+    let week_ago = today
         .checked_sub_days(chrono::Days::new(7))
-        .unwrap_or(Local::now().date_naive());
+        .unwrap_or(today);
 
     let mut costs = CostData::default();
 

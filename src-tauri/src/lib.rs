@@ -15,6 +15,8 @@ use tauri::{
 const PANEL_LABEL: &str = "panel";
 const PANEL_WIDTH: f64 = 360.0;
 const PANEL_HEIGHT: f64 = 620.0;
+/// Max ms between blur-hide and tray click to suppress re-show (toggle behavior).
+const BLUR_SUPPRESS_MS: u64 = 500;
 
 pub static PANEL_VISIBLE: AtomicBool = AtomicBool::new(false);
 pub static PANEL_DETACHED: AtomicBool = AtomicBool::new(false);
@@ -29,11 +31,23 @@ pub fn log(msg: &str) {
         .join("com.claudit.monitor");
     let _ = std::fs::create_dir_all(&log_dir);
     let log_path = log_dir.join("debug.log");
-    if let Ok(mut f) = std::fs::OpenOptions::new()
+
+    #[cfg(unix)]
+    let file = {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .mode(0o600)
+            .open(&log_path)
+    };
+    #[cfg(not(unix))]
+    let file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(log_path)
-    {
+        .open(&log_path);
+
+    if let Ok(mut f) = file {
         let _ = writeln!(f, "[{}] {}", chrono::Local::now().format("%H:%M:%S%.3f"), msg);
     }
 }
@@ -110,7 +124,6 @@ pub fn run() {
             commands::detach_panel,
             commands::attach_panel,
             commands::set_stay_on_top_pref,
-            commands::get_stay_on_top_pref,
             commands::get_autostart_enabled,
             commands::set_autostart_enabled,
             commands::check_for_updates,
@@ -175,7 +188,7 @@ pub fn run() {
                             .unwrap_or_default()
                             .as_millis() as u64;
                         let blur_ms = LAST_BLUR_HIDE_MS.load(Ordering::SeqCst);
-                        if blur_ms > 0 && now_ms.saturating_sub(blur_ms) < 500 {
+                        if blur_ms > 0 && now_ms.saturating_sub(blur_ms) < BLUR_SUPPRESS_MS {
                             log("Tray click: suppressed (panel just hidden by blur)");
                             LAST_BLUR_HIDE_MS.store(0, Ordering::SeqCst);
                             return;
@@ -226,6 +239,7 @@ pub fn run() {
                             .unwrap_or_default()
                             .as_millis() as u64;
                         LAST_BLUR_HIDE_MS.store(now_ms, Ordering::SeqCst);
+                        let _ = window.app_handle().emit("panel-hidden", ());
                         log("Panel hidden on blur");
                     }
                 }
