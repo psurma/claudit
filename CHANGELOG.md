@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.15 (2026-02-20)
+
+### Added
+- In-app auto-update: "Install & Restart" button replaces the old "Download" link that opened GitHub
+- Uses Tauri's built-in updater plugin with Ed25519 signature verification
+- After downloading, shows "Restart now" link to apply the update immediately
+- `scripts/release.sh` automates building, signing, generating `latest.json`, and creating GitHub releases
+
+### Changed
+- Update check now uses tauri-plugin-updater instead of manual GitHub API calls
+- Removed manual version comparison helpers (`parse_version`, `is_newer_version`)
+
 ## 0.6.14 (2026-02-20)
 
 ### Added

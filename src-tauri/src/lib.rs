@@ -118,6 +118,8 @@ pub fn run() {
     tauri::Builder::default()
         .manage(ccusage::CostCache::new())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_usage_data,
             commands::get_costs_data,
@@ -128,6 +130,8 @@ pub fn run() {
             commands::get_autostart_enabled,
             commands::set_autostart_enabled,
             commands::check_for_updates,
+            commands::install_update,
+            commands::relaunch_app,
             commands::open_login,
             commands::open_url,
         ])

@@ -1,6 +1,6 @@
 {
   "name": "claudit",
-  "version": "0.6.14",
+  "version": "0.6.15",
   "description": "Menu bar app showing Claude Code usage limits and estimated costs",
   "private": true,
   "scripts": {

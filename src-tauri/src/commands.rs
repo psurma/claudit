@@ -6,6 +6,7 @@ use crate::log;
 use serde::Serialize;
 use std::sync::atomic::Ordering;
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_updater::UpdaterExt;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UsageResult {
@@ -166,53 +167,69 @@ pub struct UpdateInfo {
     pub current_version: String,
     pub latest_version: String,
     pub update_available: bool,
-    pub release_url: String,
+    pub release_notes: Option<String>,
 }
 
 #[tauri::command]
-pub async fn check_for_updates() -> Result<UpdateInfo, String> {
-    log("check_for_updates: fetching latest release");
-    let client = reqwest::Client::new();
-    let resp = client
-        .get("https://api.github.com/repos/psurma/claudit/releases/latest")
-        .header("User-Agent", "Claudit")
-        .header("Accept", "application/vnd.github.v3+json")
-        .send()
+pub async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
+    log("check_for_updates: using tauri updater plugin");
+    let current = env!("CARGO_PKG_VERSION").to_string();
+
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = updater.check().await.map_err(|e| e.to_string())?;
+
+    match update {
+        Some(update) => {
+            let latest = update.version.clone();
+            let notes = update.body.clone();
+            log(&format!(
+                "check_for_updates: current={}, latest={}, update available",
+                current, latest
+            ));
+            Ok(UpdateInfo {
+                current_version: current,
+                latest_version: latest,
+                update_available: true,
+                release_notes: notes,
+            })
+        }
+        None => {
+            log(&format!("check_for_updates: current={}, up to date", current));
+            Ok(UpdateInfo {
+                current_version: current.clone(),
+                latest_version: current,
+                update_available: false,
+                release_notes: None,
+            })
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    log("install_update: checking for update");
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = updater.check().await.map_err(|e| e.to_string())?;
+
+    let update = update.ok_or_else(|| "No update available".to_string())?;
+    log(&format!("install_update: downloading v{}", update.version));
+
+    let _ = app.emit("update-progress", "downloading");
+
+    update
+        .download_and_install(|_chunk, _total| {}, || {})
         .await
         .map_err(|e| e.to_string())?;
 
-    if resp.status() == 404 {
-        let current = env!("CARGO_PKG_VERSION").to_string();
-        return Ok(UpdateInfo {
-            current_version: current,
-            latest_version: "unknown".to_string(),
-            update_available: false,
-            release_url: "https://github.com/psurma/claudit/releases".to_string(),
-        });
-    }
+    log("install_update: download and install complete");
+    let _ = app.emit("update-progress", "done");
+    Ok(())
+}
 
-    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    let tag = body["tag_name"].as_str().unwrap_or("unknown");
-    let latest = tag.strip_prefix('v').unwrap_or(tag).to_string();
-    let current = env!("CARGO_PKG_VERSION").to_string();
-    let html_url = body["html_url"]
-        .as_str()
-        .unwrap_or("https://github.com/psurma/claudit/releases")
-        .to_string();
-
-    let update_available = latest != "unknown" && is_newer_version(&latest, &current);
-
-    log(&format!(
-        "check_for_updates: current={}, latest={}, update={}",
-        current, latest, update_available
-    ));
-
-    Ok(UpdateInfo {
-        current_version: current,
-        latest_version: latest,
-        update_available,
-        release_url: html_url,
-    })
+#[tauri::command]
+pub async fn relaunch_app(app: tauri::AppHandle) -> Result<(), String> {
+    log("relaunch_app: restarting");
+    app.restart();
 }
 
 #[tauri::command]
@@ -305,20 +322,3 @@ pub async fn open_url(url: String) -> Result<(), String> {
     Ok(())
 }
 
-fn parse_version(v: &str) -> Option<Vec<u64>> {
-    v.split('.')
-        .map(|part| part.parse::<u64>().ok())
-        .collect()
-}
-
-fn is_newer_version(latest: &str, current: &str) -> bool {
-    let Some(l) = parse_version(latest) else { return false };
-    let Some(c) = parse_version(current) else { return false };
-    for i in 0..l.len().max(c.len()) {
-        let lv = l.get(i).copied().unwrap_or(0);
-        let cv = c.get(i).copied().unwrap_or(0);
-        if lv > cv { return true; }
-        if lv < cv { return false; }
-    }
-    false
-}

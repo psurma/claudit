@@ -520,19 +520,33 @@ async function checkForUpdates() {
     document.getElementById("version-label").textContent = "v" + info.current_version;
     if (info.update_available) {
       statusEl.innerHTML =
-        'v' + escapeHtml(info.latest_version) + ' available - <a href="#" class="download-link">Download</a>';
-      statusEl.querySelector(".download-link").addEventListener("click", (e) => {
+        'v' + escapeHtml(info.latest_version) + ' available - <a href="#" class="update-install-link">Install &amp; Restart</a>';
+      statusEl.querySelector(".update-install-link").addEventListener("click", (e) => {
         e.preventDefault();
-        invoke("open_url", { url: info.release_url }).catch((err) => console.error("open_url failed:", err));
+        installUpdate();
       });
-    } else if (info.latest_version === "unknown") {
-      statusEl.textContent = "No releases found";
     } else {
       statusEl.textContent = "Up to date";
     }
   } catch (e) {
     console.error("Update check failed:", e);
     statusEl.textContent = "Check failed";
+  }
+}
+
+async function installUpdate() {
+  const statusEl = document.getElementById("update-status");
+  statusEl.textContent = "Downloading update...";
+  try {
+    await invoke("install_update");
+    statusEl.innerHTML = 'Update installed - <a href="#" class="update-restart-link">Restart now</a>';
+    statusEl.querySelector(".update-restart-link").addEventListener("click", (e) => {
+      e.preventDefault();
+      invoke("relaunch_app").catch((err) => console.error("relaunch failed:", err));
+    });
+  } catch (e) {
+    console.error("Install update failed:", e);
+    statusEl.textContent = "Update failed: " + e;
   }
 }
 
