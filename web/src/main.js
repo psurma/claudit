@@ -124,7 +124,7 @@ function buildSparklineSVG(filtered, timeStart, timeEnd, color, options = {}) {
 
   if (filtered.length < 2) {
     return `<div class="sparkline">
-      <svg width="${SPARK_WIDTH}" height="${SPARK_HEIGHT}" viewBox="0 0 ${SPARK_WIDTH} ${SPARK_HEIGHT}" preserveAspectRatio="none">
+      <svg width="100%" height="${SPARK_HEIGHT}" viewBox="0 0 ${SPARK_WIDTH} ${SPARK_HEIGHT}" preserveAspectRatio="xMidYMid meet">
         <text x="${SPARK_WIDTH / 2}" y="${SPARK_HEIGHT / 2 + 4}" text-anchor="middle" fill="var(--text-dim)" font-size="11" font-family="-apple-system, sans-serif">No data</text>
       </svg>
     </div>`;
@@ -160,7 +160,7 @@ function buildSparklineSVG(filtered, timeStart, timeEnd, color, options = {}) {
   }
 
   return `<div class="sparkline" data-points='${compactPoints.replace(/'/g, "&#39;")}' data-time-start="${timeStart}" data-time-end="${timeEnd}"${predAttr}>
-    <svg width="${SPARK_WIDTH}" height="${SPARK_HEIGHT}" viewBox="0 0 ${SPARK_WIDTH} ${SPARK_HEIGHT}" preserveAspectRatio="none">
+    <svg width="100%" height="${SPARK_HEIGHT}" viewBox="0 0 ${SPARK_WIDTH} ${SPARK_HEIGHT}" preserveAspectRatio="none">
       <defs>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>

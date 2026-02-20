@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.16 (2026-02-20)
+
+### Fixed
+- Sparklines now stretch to fill the full panel width when resized in detached mode
+- SVG width changed from fixed 318px to 100%, scaling with container via viewBox
+
 ## 0.6.15 (2026-02-20)
 
 ### Added

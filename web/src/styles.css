@@ -246,6 +246,7 @@ h2 {
 
 .sparkline svg {
   display: block;
+  width: 100%;
 }
 
 .sparkline-nav {
