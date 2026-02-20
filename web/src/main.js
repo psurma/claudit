@@ -145,6 +145,7 @@ function buildSparklineSVG(filtered, timeStart, timeEnd, color, options = {}) {
   const compactPoints = JSON.stringify(filtered.map((p) => ({ t: p.timestamp, v: p.value })));
 
   let predictionLine = "";
+  let predAttr = "";
   if (showPrediction && windowEnd) {
     const now = Math.floor(Date.now() / 1000);
     if (now >= timeStart && now <= windowEnd) {
@@ -153,11 +154,12 @@ function buildSparklineSVG(filtered, timeStart, timeEnd, color, options = {}) {
         const lastPt = points[points.length - 1];
         const predY = SPARK_PAD_TOP + chartHeight - prediction.predictedValue * chartHeight;
         predictionLine = `<line x1="${lastPt.x.toFixed(1)}" y1="${lastPt.y.toFixed(1)}" x2="${SPARK_WIDTH}" y2="${predY.toFixed(1)}" stroke="${color}" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"/>`;
+        predAttr = ` data-pred-value="${prediction.predictedValue}"`;
       }
     }
   }
 
-  return `<div class="sparkline" data-points='${compactPoints.replace(/'/g, "&#39;")}'>
+  return `<div class="sparkline" data-points='${compactPoints.replace(/'/g, "&#39;")}' data-time-start="${timeStart}" data-time-end="${timeEnd}"${predAttr}>
     <svg width="${SPARK_WIDTH}" height="${SPARK_HEIGHT}" viewBox="0 0 ${SPARK_WIDTH} ${SPARK_HEIGHT}" preserveAspectRatio="none">
       <defs>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
@@ -432,7 +434,7 @@ function formatReset(isoString) {
     const parts = [];
     if (days > 0) parts.push(`${days}d`);
     if (hours > 0) parts.push(`${hours}h`);
-    parts.push(`${minutes}m`);
+    if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
 
     const dayName = DAY_NAMES[reset.getDay()];
     const date = reset.getDate();
@@ -679,8 +681,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const mouseX = e.clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, mouseX / rect.width));
 
-    const minT = pts[0].t;
-    const maxT = pts[pts.length - 1].t;
+    const minT = Number(sparkline.dataset.timeStart) || pts[0].t;
+    const maxT = Number(sparkline.dataset.timeEnd) || pts[pts.length - 1].t;
     const targetT = minT + ratio * (maxT - minT);
 
     let closest = pts[0];
@@ -693,8 +695,16 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    const pct = Math.floor(Math.min(1, Math.max(0, closest.v)) * 100);
-    tooltip.textContent = `${formatTooltipTime(closest.t)} \u2014 ${pct}%`;
+    const lastPt = pts[pts.length - 1];
+    let value = closest.v;
+    const predValue = Number(sparkline.dataset.predValue);
+    if (targetT > lastPt.t && predValue) {
+      const predTime = maxT;
+      const t = Math.min(targetT, predTime);
+      value = lastPt.v + (predValue - lastPt.v) * ((t - lastPt.t) / (predTime - lastPt.t));
+    }
+    const pct = Math.floor(Math.min(1, Math.max(0, value)) * 100);
+    tooltip.textContent = `${formatTooltipTime(targetT)} \u2014 ${pct}%`;
     tooltip.style.display = "block";
 
     const tipRect = tooltip.getBoundingClientRect();

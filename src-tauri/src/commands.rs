@@ -56,6 +56,19 @@ pub async fn get_usage_data(app: tauri::AppHandle) -> Result<UsageResult, ()> {
         Err(ref e) => (None, Some(e.clone())),
     };
 
+    if let Some(ref data) = usage {
+        if let Some(session) = data.limits.iter().find(|l| l.label == "Current session") {
+            let pct = (session.usage_pct * 100.0).floor() as i32;
+            let title = format!("{}%", pct);
+            log(&format!("set tray title: {}", title));
+            if let Some(tray) = app.tray_by_id("main-tray") {
+                let _ = tray.set_title(Some(&title));
+            } else {
+                log("tray not found by id main-tray");
+            }
+        }
+    }
+
     let usage_history = {
         let app_clone = app.clone();
         let usage_for_save = usage.clone();

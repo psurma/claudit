@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.14 (2026-02-20)
+
+### Added
+- Session usage percentage now displays next to the tray icon in the macOS menu bar (e.g., "12%")
+- Updates automatically on each refresh cycle
+
+### Fixed
+- Sparkline tooltip now maps to the full time window (e.g., 11am-4pm) instead of just the data point range, so hovering at the right edge correctly shows the window end time
+- Reset time no longer shows "0m" when minutes are zero (e.g., "1h 0m" is now "1h")
+
 ## 0.6.13 (2026-02-18)
 
 ### Fixed
