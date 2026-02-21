@@ -237,9 +237,19 @@ pub async fn open_login() -> Result<(), String> {
     log("open_login: launching claude CLI");
     #[cfg(target_os = "macos")]
     {
-        tokio::process::Command::new("osascript")
-            .arg("-e")
-            .arg("tell application \"Terminal\" to do script \"claude\"")
+        // Write a temporary .command file that Terminal.app will open and execute.
+        // This avoids needing Automation (AppleScript) permissions.
+        let tmp = std::env::temp_dir().join("claudit-login.command");
+        std::fs::write(&tmp, "#!/bin/bash\nclaude\nexit\n")
+            .map_err(|e| e.to_string())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o700))
+                .map_err(|e| e.to_string())?;
+        }
+        tokio::process::Command::new("open")
+            .arg(&tmp)
             .output()
             .await
             .map_err(|e| e.to_string())?;

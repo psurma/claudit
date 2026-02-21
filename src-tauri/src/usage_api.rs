@@ -23,6 +23,15 @@ struct ApiResponse {
     seven_day_opus: Option<UsageBucket>,
     seven_day_sonnet: Option<UsageBucket>,
     extra_usage: Option<ExtraUsage>,
+    tier: Option<String>,
+    plan: Option<String>,
+    membership: Option<Membership>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Membership {
+    tier: Option<String>,
+    plan_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,6 +61,7 @@ pub struct ExtraUsageInfo {
 pub struct UsageData {
     pub limits: Vec<UsageLimit>,
     pub extra_usage: Option<ExtraUsageInfo>,
+    pub plan: Option<String>,
 }
 
 pub async fn fetch_usage(token: &str) -> Result<UsageData, UsageError> {
@@ -72,9 +82,18 @@ pub async fn fetch_usage(token: &str) -> Result<UsageData, UsageError> {
         return Err(UsageError::RequestError(format!("HTTP {}", resp.status())));
     }
 
-    let body: ApiResponse = resp
+    let raw: serde_json::Value = resp
         .json()
         .await
+        .map_err(|e| UsageError::ParseError(e.to_string()))?;
+
+    // Log raw API keys for debugging plan detection
+    if let Some(obj) = raw.as_object() {
+        let keys: Vec<&String> = obj.keys().collect();
+        crate::log(&format!("usage API keys: {:?}", keys));
+    }
+
+    let body: ApiResponse = serde_json::from_value(raw)
         .map_err(|e| UsageError::ParseError(e.to_string()))?;
 
     let mut limits = Vec::new();
@@ -109,5 +128,11 @@ pub async fn fetch_usage(token: &str) -> Result<UsageData, UsageError> {
         }
     });
 
-    Ok(UsageData { limits, extra_usage })
+    // Try to detect plan from response
+    let plan = body.plan
+        .or(body.tier)
+        .or(body.membership.as_ref().and_then(|m| m.plan_name.clone()))
+        .or(body.membership.as_ref().and_then(|m| m.tier.clone()));
+
+    Ok(UsageData { limits, extra_usage, plan })
 }

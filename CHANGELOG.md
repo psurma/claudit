@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.18 (2026-02-21)
+
+### Added
+- Plan selector in preferences (Pro, Max 5x, Max 20x, Team, Enterprise) displayed as a badge in the header
+- Display size setting in preferences (Small, Default, Large, Extra large) to scale all text
+- Day markers on weekly sparklines showing vertical tick lines and short day labels (Mon, Tue, etc.) at midnight boundaries
+
+### Changed
+- Reset time format changed from "in 4h 55m (Saturday 21st Feb 1pm)" to "today at 1pm (in 4h 55m)" with smart day labels (today/tomorrow/full date)
+
+## 0.6.17 (2026-02-21)
+
+### Fixed
+- "Open claude to login" button now works without requiring macOS Automation permissions
+- Replaced AppleScript Terminal control with a .command file approach that Terminal opens natively
+
 ## 0.6.16 (2026-02-20)
 
 ### Fixed

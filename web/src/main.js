@@ -18,6 +18,8 @@ const COSTS_COLLAPSED_KEY = "claudit-costs-collapsed";
 const WEEKLY_COLLAPSED_KEY = "claudit-weekly-collapsed";
 const EXTRA_COLLAPSED_KEY = "claudit-extra-collapsed";
 const STAY_ON_TOP_KEY = "claudit-stay-on-top";
+const PLAN_KEY = "claudit-plan";
+const FONTSIZE_KEY = "claudit-fontsize";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -30,11 +32,28 @@ const SPARK_PAD_BOTTOM = 2;
 const sparklineData = {};
 const sparklineOffsets = {};
 
+function snapToHour(d) {
+  const min = d.getMinutes();
+  if (min >= 58) {
+    const snapped = new Date(d);
+    snapped.setMinutes(0, 0, 0);
+    snapped.setHours(snapped.getHours() + 1);
+    return snapped;
+  }
+  if (min <= 2) {
+    const snapped = new Date(d);
+    snapped.setMinutes(0, 0, 0);
+    return snapped;
+  }
+  return d;
+}
+
 function formatTime12h(d) {
-  const h = d.getHours();
+  const s = snapToHour(d);
+  const h = s.getHours();
   const ampm = h >= 12 ? "pm" : "am";
   const h12 = h % 12 || 12;
-  const min = d.getMinutes();
+  const min = s.getMinutes();
   return min > 0 ? `${h12}:${String(min).padStart(2, "0")}${ampm}` : `${h12}${ampm}`;
 }
 
@@ -92,6 +111,9 @@ async function fetchAndRender(silent = false) {
     const usageData = await usagePromise;
     lastUsageData = usageData;
     renderUsage(usageData);
+    if (usageData.usage && usageData.usage.plan) {
+      updatePlanFromAPI(usageData.usage.plan);
+    }
     document.getElementById("timestamp").textContent = "Updated " + usageData.timestamp;
   } catch (e) {
     console.error("Failed to fetch usage:", e);
@@ -117,8 +139,10 @@ function getHistoryForLabel(history, label) {
     .map((s) => ({ timestamp: s.timestamp, value: s.buckets[label] }));
 }
 
+const SHORT_DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 function buildSparklineSVG(filtered, timeStart, timeEnd, color, options = {}) {
-  const { showPrediction, windowEnd } = options;
+  const { showPrediction, windowEnd, dayMarkers } = options;
   const chartHeight = SPARK_HEIGHT - SPARK_PAD_TOP - SPARK_PAD_BOTTOM;
   const timeRange = timeEnd - timeStart || 1;
 
@@ -159,6 +183,20 @@ function buildSparklineSVG(filtered, timeStart, timeEnd, color, options = {}) {
     }
   }
 
+  let dayMarkersSvg = "";
+  if (dayMarkers) {
+    const startDate = new Date(timeStart * 1000);
+    // Find first midnight after timeStart
+    const firstMidnight = new Date(startDate);
+    firstMidnight.setHours(24, 0, 0, 0);
+    for (let m = firstMidnight.getTime() / 1000; m < timeEnd; m += 86400) {
+      const x = ((m - timeStart) / timeRange) * SPARK_WIDTH;
+      const label = SHORT_DAY_NAMES[new Date(m * 1000).getDay()];
+      dayMarkersSvg += `<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${SPARK_HEIGHT}" stroke="var(--text-dim)" stroke-width="0.5" opacity="0.3"/>`;
+      dayMarkersSvg += `<text x="${(x + 3).toFixed(1)}" y="8" fill="var(--text-dim)" font-size="7" font-family="-apple-system, sans-serif" opacity="0.6">${label}</text>`;
+    }
+  }
+
   return `<div class="sparkline" data-points='${compactPoints.replace(/'/g, "&#39;")}' data-time-start="${timeStart}" data-time-end="${timeEnd}"${predAttr}>
     <svg width="100%" height="${SPARK_HEIGHT}" viewBox="0 0 ${SPARK_WIDTH} ${SPARK_HEIGHT}" preserveAspectRatio="none">
       <defs>
@@ -167,6 +205,7 @@ function buildSparklineSVG(filtered, timeStart, timeEnd, color, options = {}) {
           <stop offset="100%" stop-color="${color}" stop-opacity="0.05"/>
         </linearGradient>
       </defs>
+      ${dayMarkersSvg}
       <polygon points="${areaPoints}" fill="url(#${gradId})"/>
       <polyline points="${linePoints}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
       ${predictionLine}
@@ -180,7 +219,11 @@ function renderSparkline(dataPoints, maxAgeSeconds, color) {
   const cutoff = now - maxAgeSeconds;
   const filtered = dataPoints.filter((p) => p.timestamp >= cutoff);
   if (filtered.length < 2) return "";
-  return buildSparklineSVG(filtered, filtered[0].timestamp, filtered[filtered.length - 1].timestamp, color);
+  const showDays = maxAgeSeconds >= WEEKLY_MAX_AGE;
+  // Use full time window so day markers align and data extends to "now"
+  const timeStart = showDays ? cutoff : filtered[0].timestamp;
+  const timeEnd = showDays ? now : filtered[filtered.length - 1].timestamp;
+  return buildSparklineSVG(filtered, timeStart, timeEnd, color, { dayMarkers: showDays });
 }
 
 
@@ -415,8 +458,8 @@ function renderCosts(data) {
 }
 
 function formatCost(value) {
-  if (value === 0) return "$0.00";
-  return "$" + value.toFixed(2);
+  if (value === 0) return "\u00a30.00";
+  return "\u00a3" + value.toFixed(2);
 }
 
 function formatReset(isoString) {
@@ -436,12 +479,25 @@ function formatReset(isoString) {
     if (hours > 0) parts.push(`${hours}h`);
     if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
 
-    const dayName = DAY_NAMES[reset.getDay()];
-    const date = reset.getDate();
-    const suffix = getOrdinalSuffix(date);
-    const month = MONTH_NAMES[reset.getMonth()];
+    const isToday = reset.toDateString() === now.toDateString();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isTomorrow = reset.toDateString() === tomorrow.toDateString();
 
-    return `in ${parts.join(" ")} (${dayName} ${date}${suffix} ${month} ${formatTime12h(reset)})`;
+    let dayLabel;
+    if (isToday) {
+      dayLabel = "today";
+    } else if (isTomorrow) {
+      dayLabel = "tomorrow";
+    } else {
+      const dayName = DAY_NAMES[reset.getDay()];
+      const date = reset.getDate();
+      const suffix = getOrdinalSuffix(date);
+      const month = MONTH_NAMES[reset.getMonth()];
+      dayLabel = `${dayName} ${date}${suffix} ${month}`;
+    }
+
+    return `${dayLabel} at ${formatTime12h(reset)} (in ${parts.join(" ")})`;
   } catch {
     return "";
   }
@@ -490,6 +546,9 @@ async function loadPrefs() {
 
   const stayOnTop = localStorage.getItem(STAY_ON_TOP_KEY) === "true";
   document.getElementById("stay-on-top-toggle").checked = stayOnTop;
+
+  document.getElementById("plan-select").value = localStorage.getItem(PLAN_KEY) || "";
+  document.getElementById("fontsize-select").value = localStorage.getItem(FONTSIZE_KEY) || "13";
 }
 
 async function handleAutostartChange(e) {
@@ -510,6 +569,46 @@ async function handleStayOnTopChange(e) {
   } catch (err) {
     console.error("Failed to set stay-on-top pref:", err);
   }
+}
+
+function initPlan() {
+  const plan = localStorage.getItem(PLAN_KEY) || "";
+  document.getElementById("plan-badge").textContent = plan;
+}
+
+function updatePlanFromAPI(apiPlan) {
+  if (apiPlan) {
+    localStorage.setItem(PLAN_KEY, apiPlan);
+    document.getElementById("plan-badge").textContent = apiPlan;
+    document.getElementById("plan-select").value = apiPlan;
+  }
+}
+
+function handlePlanChange(e) {
+  const plan = e.target.value;
+  localStorage.setItem(PLAN_KEY, plan);
+  document.getElementById("plan-badge").textContent = plan;
+}
+
+function initFontSize() {
+  const size = localStorage.getItem(FONTSIZE_KEY) || "13";
+  applyZoom(size);
+}
+
+function handleFontSizeChange(e) {
+  const size = e.target.value;
+  localStorage.setItem(FONTSIZE_KEY, size);
+  applyZoom(size);
+}
+
+function applyZoom(size) {
+  const zoom = parseFloat(size) / 13;
+  document.querySelector(".panel").style.zoom = zoom;
+  // Resize window to fit zoomed content (base: 360x620)
+  const w = Math.round(360 * zoom);
+  const h = Math.round(620 * zoom);
+  const win = getCurrentWindow();
+  win.setSize(new window.__TAURI__.window.LogicalSize(w, h));
 }
 
 async function checkForUpdates() {
@@ -627,6 +726,8 @@ function formatTooltipTime(ts) {
 
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
+  initPlan();
+  initFontSize();
   initCollapsible("weekly-content", "weekly-header", WEEKLY_COLLAPSED_KEY);
   initCollapsible("extra-content", "extra-header", EXTRA_COLLAPSED_KEY);
   initCollapsible("costs-content", "costs-header", COSTS_COLLAPSED_KEY);
@@ -652,6 +753,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById("prefs-btn").addEventListener("click", togglePrefs);
+  document.getElementById("plan-select").addEventListener("change", handlePlanChange);
+  document.getElementById("fontsize-select").addEventListener("change", handleFontSizeChange);
   document.getElementById("autostart-toggle").addEventListener("change", handleAutostartChange);
   document.getElementById("stay-on-top-toggle").addEventListener("change", handleStayOnTopChange);
   document.getElementById("check-updates-link").addEventListener("click", (e) => {

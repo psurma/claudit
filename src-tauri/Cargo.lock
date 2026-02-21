@@ -327,7 +327,7 @@ dependencies = [
 
 [[package]]
 name = "claudit"
-version = "0.6.15"
+version = "0.6.18"
 dependencies = [
  "chrono",
  "dirs 6.0.0",

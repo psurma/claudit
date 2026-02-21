@@ -321,6 +321,36 @@ h2 {
   color: var(--text);
 }
 
+.pref-select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+
+.pref-select:focus {
+  border-color: var(--blue);
+}
+
+.plan-badge {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: var(--surface);
+  border-radius: 3px;
+  padding: 1px 5px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.plan-badge:empty {
+  display: none;
+}
+
 .toggle-switch {
   position: relative;
   display: inline-block;

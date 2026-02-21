@@ -11,7 +11,7 @@
     <div class="arrow"></div>
     <div class="panel">
       <div class="header">
-        <h1>Claude Usage</h1>
+        <h1>Claude Usage <span id="plan-badge" class="plan-badge"></span></h1>
         <div class="header-buttons">
           <button id="prefs-btn" title="Preferences">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -41,6 +41,26 @@
 
       <section id="prefs-section" style="display:none">
         <div class="pref-row">
+          <span class="pref-label">Plan</span>
+          <select id="plan-select" class="pref-select">
+            <option value="">--</option>
+            <option value="Pro">Pro</option>
+            <option value="Max (5x)">Max (5x)</option>
+            <option value="Max (20x)">Max (20x)</option>
+            <option value="Team">Team</option>
+            <option value="Enterprise">Enterprise</option>
+          </select>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Display size</span>
+          <select id="fontsize-select" class="pref-select">
+            <option value="12">Small</option>
+            <option value="13" selected>Default</option>
+            <option value="14">Large</option>
+            <option value="16">Extra large</option>
+          </select>
+        </div>
+        <div class="pref-row">
           <span class="pref-label">Dark mode</span>
           <label class="toggle-switch">
             <input type="checkbox" id="darkmode-toggle">
@@ -62,7 +82,7 @@
           </label>
         </div>
         <div class="pref-row update-row">
-          <span class="pref-label" id="version-label">v0.6.16</span>
+          <span class="pref-label" id="version-label">v0.6.18</span>
           <span id="update-status">
             <a href="#" id="check-updates-link">Check for updates</a>
           </span>
