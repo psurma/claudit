@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.20 (2026-02-26)
+
+### Added
+- "Use your tokens" macOS notification when session capacity is going unused near the end of a 5-hour window
+- Background polling loop in Rust (every 5 minutes) checks usage independently of panel visibility
+- Notification fires when 30-75 minutes remain and usage is below 80%, once per session window
+- "Notify when tokens are going unused" toggle in Preferences (enabled by default)
+- Uses `notify-rust` crate for native macOS Notification Center integration
+
+## 0.6.19 (2026-02-24)
+
+### Fixed
+- Fix sparkline tooltip showing stale data after session resets to 0% - all early-return paths in the hover handler now properly hide the tooltip
+- Hide sparkline tooltip when usage data re-renders to prevent stale tooltip from persisting
+
 ## 0.6.18 (2026-02-21)
 
 ### Added

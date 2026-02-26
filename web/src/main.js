@@ -18,6 +18,7 @@ const COSTS_COLLAPSED_KEY = "claudit-costs-collapsed";
 const WEEKLY_COLLAPSED_KEY = "claudit-weekly-collapsed";
 const EXTRA_COLLAPSED_KEY = "claudit-extra-collapsed";
 const STAY_ON_TOP_KEY = "claudit-stay-on-top";
+const NOTIFY_TOKENS_KEY = "claudit-notify-tokens";
 const PLAN_KEY = "claudit-plan";
 const FONTSIZE_KEY = "claudit-fontsize";
 
@@ -328,6 +329,10 @@ function renderUsage(data) {
   const loading = document.getElementById("usage-loading");
   const errorEl = document.getElementById("usage-error");
 
+  // Hide sparkline tooltip when DOM is about to be replaced
+  const existingTooltip = document.querySelector(".sparkline-tooltip");
+  if (existingTooltip) existingTooltip.style.display = "none";
+
   loading.style.display = "none";
 
   if (data.usage_error) {
@@ -547,6 +552,10 @@ async function loadPrefs() {
   const stayOnTop = localStorage.getItem(STAY_ON_TOP_KEY) === "true";
   document.getElementById("stay-on-top-toggle").checked = stayOnTop;
 
+  // Notify tokens defaults to true (enabled) if never set
+  const notifyTokens = localStorage.getItem(NOTIFY_TOKENS_KEY) !== "false";
+  document.getElementById("notify-tokens-toggle").checked = notifyTokens;
+
   document.getElementById("plan-select").value = localStorage.getItem(PLAN_KEY) || "";
   document.getElementById("fontsize-select").value = localStorage.getItem(FONTSIZE_KEY) || "13";
 }
@@ -568,6 +577,16 @@ async function handleStayOnTopChange(e) {
     await invoke("set_stay_on_top_pref", { enabled });
   } catch (err) {
     console.error("Failed to set stay-on-top pref:", err);
+  }
+}
+
+async function handleNotifyTokensChange(e) {
+  const enabled = e.target.checked;
+  localStorage.setItem(NOTIFY_TOKENS_KEY, enabled ? "true" : "false");
+  try {
+    await invoke("set_notify_tokens_pref", { enabled });
+  } catch (err) {
+    console.error("Failed to set notify-tokens pref:", err);
   }
 }
 
@@ -741,6 +760,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const stayOnTop = localStorage.getItem(STAY_ON_TOP_KEY) === "true";
   invoke("set_stay_on_top_pref", { enabled: stayOnTop }).catch(() => {});
 
+  // Sync notify-tokens pref to Rust on startup (defaults to true)
+  const notifyTokens = localStorage.getItem(NOTIFY_TOKENS_KEY) !== "false";
+  invoke("set_notify_tokens_pref", { enabled: notifyTokens }).catch(() => {});
+
   document.getElementById("darkmode-toggle").addEventListener("change", (e) => {
     const theme = e.target.checked ? "dark" : "light";
     localStorage.setItem(THEME_KEY, theme);
@@ -757,6 +780,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("fontsize-select").addEventListener("change", handleFontSizeChange);
   document.getElementById("autostart-toggle").addEventListener("change", handleAutostartChange);
   document.getElementById("stay-on-top-toggle").addEventListener("change", handleStayOnTopChange);
+  document.getElementById("notify-tokens-toggle").addEventListener("change", handleNotifyTokensChange);
   document.getElementById("check-updates-link").addEventListener("click", (e) => {
     e.preventDefault();
     checkForUpdates();
@@ -780,19 +804,20 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     const raw = sparkline.getAttribute("data-points");
-    if (!raw) return;
+    if (!raw) { tooltip.style.display = "none"; return; }
 
     let pts;
     try {
       pts = JSON.parse(raw);
-      if (!Array.isArray(pts)) return;
+      if (!Array.isArray(pts)) { tooltip.style.display = "none"; return; }
     } catch {
+      tooltip.style.display = "none";
       return;
     }
-    if (pts.length < 2) return;
+    if (pts.length < 2) { tooltip.style.display = "none"; return; }
 
     const svg = sparkline.querySelector("svg");
-    if (!svg) return;
+    if (!svg) { tooltip.style.display = "none"; return; }
 
     const rect = svg.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;

@@ -145,6 +145,13 @@ pub fn set_stay_on_top_pref(enabled: bool) -> Result<(), ()> {
 }
 
 #[tauri::command]
+pub fn set_notify_tokens_pref(enabled: bool) -> Result<(), ()> {
+    log(&format!("set_notify_tokens_pref: {}", enabled));
+    crate::notifier::NOTIFICATIONS_ENABLED.store(enabled, Ordering::SeqCst);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_autostart_enabled(app: tauri::AppHandle) -> Result<bool, String> {
     use tauri_plugin_autostart::ManagerExt;
     let manager = app.autolaunch();

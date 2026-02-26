@@ -2,6 +2,7 @@ mod ccusage;
 mod commands;
 mod history;
 mod keychain;
+mod notifier;
 mod usage_api;
 
 use std::io::Write;
@@ -134,6 +135,7 @@ pub fn run() {
             commands::relaunch_app,
             commands::open_login,
             commands::open_url,
+            commands::set_notify_tokens_pref,
         ])
         .setup(|app| {
             log("Setup starting");
@@ -226,6 +228,17 @@ pub fn run() {
                 .build(app)?;
 
             log("Tray icon with menu created, setup complete");
+
+            // Spawn background notification checker (independent of panel visibility)
+            tauri::async_runtime::spawn(async {
+                // Let the app settle before starting checks
+                tokio::time::sleep(std::time::Duration::from_secs(120)).await;
+                loop {
+                    notifier::check_and_notify().await;
+                    tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+                }
+            });
+
             Ok(())
         })
         .on_window_event(|window, event| {

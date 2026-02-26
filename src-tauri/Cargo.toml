@@ -1,6 +1,6 @@
 [package]
 name = "claudit"
-version = "0.6.18"
+version = "0.6.20"
 edition = "2021"
 
 [lib]
@@ -23,3 +23,4 @@ dirs = "6"
 tauri-plugin-autostart = "2"
 tauri-plugin-updater = { version = "2", features = ["rustls-tls"] }
 tauri-plugin-process = "2"
+notify-rust = "4"
