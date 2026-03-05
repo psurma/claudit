@@ -17,6 +17,7 @@ pub struct UsageResult {
     pub usage_error: Option<String>,
     pub usage_history: Option<Vec<UsageSnapshot>>,
     pub timestamp: String,
+    pub rate_limited: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -52,7 +53,7 @@ pub async fn get_usage_data(app: tauri::AppHandle) -> Result<UsageResult, ()> {
         .and_then(|r| r.map_err(|e| e.to_string()));
     log(&format!("get_usage_data: keychain result={}", token_result.is_ok()));
 
-    let (usage, usage_error) = match token_result {
+    let (usage, usage_error, rate_limited) = match token_result {
         Ok(ref token) => {
             log("get_usage_data: fetching usage API");
             match tokio::time::timeout(
@@ -63,29 +64,29 @@ pub async fn get_usage_data(app: tauri::AppHandle) -> Result<UsageResult, ()> {
                     log("usage OK");
                     let mut cache = LAST_USAGE.lock().unwrap();
                     *cache = Some(data.clone());
-                    (Some(data), None)
+                    (Some(data), None, false)
                 }
                 Ok(Err(UsageError::RateLimited)) => {
                     let cache = LAST_USAGE.lock().unwrap();
                     if cache.is_some() {
                         log("usage rate-limited, returning cached data");
-                        (cache.clone(), None)
+                        (cache.clone(), None, true)
                     } else {
                         log("usage rate-limited, no cached data");
-                        (None, Some("Rate limited - please wait a moment and retry".to_string()))
+                        (None, Some("Rate limited - please wait a moment".to_string()), true)
                     }
                 }
                 Ok(Err(e)) => {
                     log(&format!("usage error: {}", e));
-                    (None, Some(e.to_string()))
+                    (None, Some(e.to_string()), false)
                 }
                 Err(_) => {
                     log("usage timeout");
-                    (None, Some("Request timed out".to_string()))
+                    (None, Some("Request timed out".to_string()), false)
                 }
             }
         }
-        Err(ref e) => (None, Some(e.clone())),
+        Err(ref e) => (None, Some(e.clone()), false),
     };
 
     if let Some(ref data) = usage {
@@ -115,7 +116,7 @@ pub async fn get_usage_data(app: tauri::AppHandle) -> Result<UsageResult, ()> {
     };
 
     log("get_usage_data: done");
-    Ok(UsageResult { usage, usage_error, usage_history, timestamp })
+    Ok(UsageResult { usage, usage_error, usage_history, timestamp, rate_limited })
 }
 
 #[tauri::command]

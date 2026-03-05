@@ -5,6 +5,7 @@ const { getCurrentWindow } = window.__TAURI__.window;
 let refreshTimer = null;
 let countdownTimer = null;
 let countdown = 60;
+let refreshInterval = 60;
 let isDetached = false;
 
 // Cache last successful responses for instant panel rendering
@@ -112,6 +113,14 @@ async function fetchAndRender(silent = false) {
     const usageData = await usagePromise;
     lastUsageData = usageData;
     renderUsage(usageData);
+    if (usageData.rate_limited) {
+      refreshInterval = Math.min(refreshInterval * 2, 300);
+      console.log("Rate limited, backing off to " + refreshInterval + "s");
+      startAutoRefresh();
+    } else if (refreshInterval > 60) {
+      refreshInterval = 60;
+      startAutoRefresh();
+    }
     if (usageData.usage && usageData.usage.plan) {
       updatePlanFromAPI(usageData.usage.plan);
     }
@@ -690,12 +699,12 @@ function initCollapsible(contentId, headerId, storageKey) {
 }
 
 function resetCountdown() {
-  countdown = 60;
+  countdown = refreshInterval;
   if (countdownTimer) clearInterval(countdownTimer);
   countdownTimer = setInterval(() => {
     countdown--;
     if (countdown <= 0) {
-      countdown = 60;
+      countdown = refreshInterval;
     }
     document.getElementById("next-refresh").textContent =
       "Auto-refresh in " + countdown + "s";
@@ -704,7 +713,7 @@ function resetCountdown() {
 
 function startAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = setInterval(() => fetchAndRender(true), 60000);
+  refreshTimer = setInterval(() => fetchAndRender(true), refreshInterval * 1000);
   resetCountdown();
 }
 
