@@ -66,9 +66,14 @@ pub async fn get_usage_data(app: tauri::AppHandle) -> Result<UsageResult, ()> {
                     (Some(data), None)
                 }
                 Ok(Err(UsageError::RateLimited)) => {
-                    log("usage rate-limited, returning cached data");
                     let cache = LAST_USAGE.lock().unwrap();
-                    (cache.clone(), None)
+                    if cache.is_some() {
+                        log("usage rate-limited, returning cached data");
+                        (cache.clone(), None)
+                    } else {
+                        log("usage rate-limited, no cached data");
+                        (None, Some("Rate limited - please wait a moment and retry".to_string()))
+                    }
                 }
                 Ok(Err(e)) => {
                     log(&format!("usage error: {}", e));
