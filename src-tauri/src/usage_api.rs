@@ -68,20 +68,41 @@ pub struct UsageData {
 
 pub async fn fetch_usage(token: &str) -> Result<UsageData, UsageError> {
     let client = reqwest::Client::new();
-    let resp = client
-        .get("https://api.anthropic.com/api/oauth/usage")
-        .bearer_auth(token)
-        .header("anthropic-beta", "oauth-2025-04-20")
-        .send()
-        .await
-        .map_err(|e| UsageError::RequestError(e.to_string()))?;
+
+    let mut delay = 2;
+    let mut resp = None;
+    for attempt in 0..3 {
+        let r = client
+            .get("https://api.anthropic.com/api/oauth/usage")
+            .bearer_auth(token)
+            .header("anthropic-beta", "oauth-2025-04-20")
+            .send()
+            .await
+            .map_err(|e| UsageError::RequestError(e.to_string()))?;
+
+        if r.status() == 429 {
+            // Parse Retry-After header if present, otherwise use exponential backoff
+            let wait = r.headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(delay);
+            crate::log(&format!("usage 429, retry {}/2 in {}s", attempt + 1, wait));
+            if attempt < 2 {
+                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+                delay *= 2;
+                continue;
+            }
+            return Err(UsageError::RateLimited);
+        }
+
+        resp = Some(r);
+        break;
+    }
+    let resp = resp.unwrap();
 
     if resp.status() == 401 || resp.status() == 403 {
         return Err(UsageError::Unauthorized);
-    }
-
-    if resp.status() == 429 {
-        return Err(UsageError::RateLimited);
     }
 
     if !resp.status().is_success() {

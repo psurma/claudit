@@ -57,7 +57,7 @@ pub async fn get_usage_data(app: tauri::AppHandle) -> Result<UsageResult, ()> {
         Ok(ref token) => {
             log("get_usage_data: fetching usage API");
             match tokio::time::timeout(
-                std::time::Duration::from_secs(10),
+                std::time::Duration::from_secs(30),
                 usage_api::fetch_usage(token),
             ).await {
                 Ok(Ok(data)) => {

@@ -1,10 +1,11 @@
 # Changelog
 
-## 0.6.21 (2026-03-05)
+## 0.6.22 (2026-03-05)
 
 ### Fixed
-- Handle HTTP 429 (rate limit) from Anthropic usage API gracefully instead of showing raw error
+- Retry API requests up to 3 times with exponential backoff (2s, 4s, 8s) on HTTP 429, respecting Retry-After header
 - Cache last successful usage response and return it silently when rate-limited
+- Frontend backs off polling interval on repeated 429s (60s -> 120s -> 240s -> 300s), resets on success
 - Notifier skips check quietly on 429 instead of logging a confusing error
 
 ## 0.6.20 (2026-02-26)
