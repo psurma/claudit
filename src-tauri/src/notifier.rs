@@ -24,6 +24,10 @@ pub async fn check_and_notify() {
 
     let data = match usage_api::fetch_usage(&token).await {
         Ok(d) => d,
+        Err(usage_api::UsageError::RateLimited) => {
+            crate::log("notifier: rate-limited, skipping check");
+            return;
+        }
         Err(e) => {
             crate::log(&format!("notifier: fetch_usage error: {}", e));
             return;

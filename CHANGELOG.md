@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.21 (2026-03-05)
+
+### Fixed
+- Handle HTTP 429 (rate limit) from Anthropic usage API gracefully instead of showing raw error
+- Cache last successful usage response and return it silently when rate-limited
+- Notifier skips check quietly on 429 instead of logging a confusing error
+
 ## 0.6.20 (2026-02-26)
 
 ### Added

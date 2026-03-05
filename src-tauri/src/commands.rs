@@ -1,12 +1,15 @@
 use crate::ccusage::{self, CostCache, CostData};
 use crate::history::{self, UsageSnapshot};
 use crate::keychain;
-use crate::usage_api::{self, UsageData};
+use crate::usage_api::{self, UsageData, UsageError};
 use crate::log;
 use serde::Serialize;
 use std::sync::atomic::Ordering;
+use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_updater::UpdaterExt;
+
+static LAST_USAGE: Mutex<Option<UsageData>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UsageResult {
@@ -52,7 +55,30 @@ pub async fn get_usage_data(app: tauri::AppHandle) -> Result<UsageResult, ()> {
     let (usage, usage_error) = match token_result {
         Ok(ref token) => {
             log("get_usage_data: fetching usage API");
-            fetch_with_timeout("usage", 10, usage_api::fetch_usage(token)).await
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                usage_api::fetch_usage(token),
+            ).await {
+                Ok(Ok(data)) => {
+                    log("usage OK");
+                    let mut cache = LAST_USAGE.lock().unwrap();
+                    *cache = Some(data.clone());
+                    (Some(data), None)
+                }
+                Ok(Err(UsageError::RateLimited)) => {
+                    log("usage rate-limited, returning cached data");
+                    let cache = LAST_USAGE.lock().unwrap();
+                    (cache.clone(), None)
+                }
+                Ok(Err(e)) => {
+                    log(&format!("usage error: {}", e));
+                    (None, Some(e.to_string()))
+                }
+                Err(_) => {
+                    log("usage timeout");
+                    (None, Some("Request timed out".to_string()))
+                }
+            }
         }
         Err(ref e) => (None, Some(e.clone())),
     };

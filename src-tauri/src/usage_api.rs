@@ -6,6 +6,8 @@ pub enum UsageError {
     RequestError(String),
     #[error("Unauthorized - run `claude` to refresh your session")]
     Unauthorized,
+    #[error("Rate limited - using cached data")]
+    RateLimited,
     #[error("Failed to parse response: {0}")]
     ParseError(String),
 }
@@ -76,6 +78,10 @@ pub async fn fetch_usage(token: &str) -> Result<UsageData, UsageError> {
 
     if resp.status() == 401 || resp.status() == 403 {
         return Err(UsageError::Unauthorized);
+    }
+
+    if resp.status() == 429 {
+        return Err(UsageError::RateLimited);
     }
 
     if !resp.status().is_success() {
